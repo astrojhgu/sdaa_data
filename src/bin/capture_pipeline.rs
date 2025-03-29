@@ -3,16 +3,15 @@ use std::{
     fs::File,
     io::Write,
     net::UdpSocket,
-    ops::AddAssign,
     sync::{Arc, Mutex},
 };
 
 use clap::Parser;
-use crossbeam::channel::{bounded, Receiver, Sender};
+use crossbeam::channel::bounded;
 use sdaa_data::{
     payload::Payload,
     pipeline::recv_pkt,
-    utils::{as_mut_u8_slice, as_u8_slice},
+    utils::as_u8_slice,
 };
 
 #[derive(Parser, Debug)]

@@ -1,21 +1,40 @@
+use std::time::{Duration, Instant};
 use std::{net::UdpSocket, sync::Arc};
 
+use chrono::Local;
 use crossbeam::channel::{Receiver, Sender};
 use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
-use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator}, slice::ParallelSliceMut};
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
 
-use crate::{payload::{Payload, N_PT_PER_FRAME}, utils::as_mut_u8_slice};
+use crate::{
+    payload::{Payload, N_PT_PER_FRAME},
+    utils::as_mut_u8_slice,
+};
 
 pub fn recv_pkt(
     socket: UdpSocket,
     tx: Sender<LinearOwnedReusable<Payload>>,
     pool: Arc<LinearObjectPool<Payload>>,
 ) {
+    let mut last_print_time = Instant::now();
+    let print_interval = Duration::from_secs(2);
+
     let mut next_cnt = None;
+    let mut ndropped = 0;
 
     loop {
+        let now = Instant::now();
+
+        if now.duration_since(last_print_time) >= print_interval {
+            let local_time = Local::now().format("%Y-%m-%d %H:%M:%S");
+            println!("{} {} pkts dropped q={}", local_time, ndropped, tx.len());
+            last_print_time = now;
+        }
         let mut payload = pool.pull_owned();
         let buf = as_mut_u8_slice(&mut payload as &mut Payload);
         let (s, _a) = socket.recv_from(buf).unwrap();
@@ -33,7 +52,8 @@ pub fn recv_pkt(
                 tx.send(payload).unwrap();
                 break;
             }
-            print!("x");
+
+            ndropped += 1;
 
             let mut payload1 = pool.pull_owned();
             payload1.copy_header(&payload);
@@ -43,7 +63,6 @@ pub fn recv_pkt(
         }
     }
 }
-
 
 /*
 pub fn calc_spectrum(
@@ -69,7 +88,7 @@ pub fn calc_spectrum(
         fbuf.par_chunks_mut(length).zip((0..n).into_par_iter().map(|_|pool.pull_owned())).for_each(|(a,b)|{
             r2c.process(a,b).unwrap();
         });
-        
+
     }
 }
 */
