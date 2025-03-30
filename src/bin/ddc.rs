@@ -1,15 +1,26 @@
 use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
 use num::Complex;
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::Write,
     net::UdpSocket,
+    slice,
     sync::{Arc, Mutex},
 };
 
+use chrono::Local;
+use std::thread;
+use std::time::{Duration, Instant};
+
 use clap::Parser;
 use crossbeam::channel::bounded;
-use sdaa_data::{ddc::DownConverter, payload::Payload, pipeline::recv_pkt, utils::as_u8_slice};
+use sdaa_data::{
+    ddc::ddc_x8,
+    payload::Payload,
+    pipeline::recv_pkt,
+    utils::{as_u8_slice, slice_as_u8},
+    Ftype,
+};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -32,55 +43,41 @@ fn main() {
     let args = Args::parse();
 
     let socket = UdpSocket::bind(&args.local_addr).unwrap();
-    let (tx_raw, rx_raw) = bounded::<LinearOwnedReusable<Payload>>(1024);
+    let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(4096);
+    let (tx_ddc, rx_ddc) = bounded::<LinearOwnedReusable<Vec<Complex<Ftype>>>>(4096);
 
-    let buf_cnt = Arc::new(Mutex::new(0));
-    let buf_cnt1 = Arc::clone(&buf_cnt);
-    let pool = Arc::new(LinearObjectPool::new(
-        move || {
-            eprint!(".");
-            let mut cnt = buf_cnt1.lock().unwrap();
-            *cnt += 1;
-            Payload::default()
-        },
-        |v| {
-            v.pkt_cnt = 0;
-            v.data.fill(0);
-        },
-    ));
+    //let pool1 = Arc::clone(&pool);
+    std::thread::spawn(|| recv_pkt(socket, tx_payload));
 
-    let pool1 = Arc::clone(&pool);
-    std::thread::spawn(|| recv_pkt(socket, tx_raw, pool1));
-
-    let (tx_ddc, rx_ddc) = bounded(1024);
-
-    let pool_ddc = Arc::new(LinearObjectPool::new(
-        move || {
-            eprintln!("#");
-            Vec::new()
-        },
-        |_v| {},
-    ));
-
-    std::thread::spawn(move || {
-        let mut ddc = DownConverter::new(32, 0.8, 5.0, 4, 800);
-        ddc.process(rx_raw, tx_ddc, pool_ddc);
-    });
-
-    let mut outfile=args.outname.map(|n| File::create(n).unwrap());
-
+    std::thread::spawn(|| ddc_x8(rx_payload, tx_ddc, 853));
+    let mut last_print_time = Instant::now();
+    let mut last_printed_second = 0; // 记录上次打印的秒数
+    let t0=Local::now();
+    let mut nsamples=0;
     for i in 0.. {
         let ddc_data = rx_ddc.recv().unwrap();
-
-        if i%10000==0{
-            println!("{}", ddc_data.len());
+        nsamples+=ddc_data.len();
+        if let Some(ref outname) = args.outname {
+            let mut f = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(outname)
+                .unwrap();
+            f.write_all(slice_as_u8(&ddc_data)).unwrap();
         }
+        if last_print_time.elapsed() >= Duration::from_secs(1) {
+            let current_time = Local::now();
+            let dt=current_time-t0;
+            
+            let current_second = current_time.timestamp(); // 获取当前秒数
 
-        if let Some(ref mut f)=outfile{
-            
-            let d=unsafe{std::slice::from_raw_parts(ddc_data.as_ptr() as *const u8, ddc_data.len()*std::mem::size_of::<Complex<f32>>())};
-            f.write_all(d).unwrap();
-            
+            // 仅当秒数变化时才打印（避免 1s 内多次打印）
+            if current_second != last_printed_second {
+                println!("{} {} {} {} {} MSps", current_time.format("%Y-%m-%d %H:%M:%S"), i, rx_ddc.len(), dt.num_seconds(), nsamples as f64/1e6/dt.num_seconds() as f64);
+                last_printed_second = current_second;
+            }
+
+            last_print_time = Instant::now(); // 重置计时
         }
     }
 }

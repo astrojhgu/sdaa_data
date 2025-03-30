@@ -19,13 +19,23 @@ use crate::{
 pub fn recv_pkt(
     socket: UdpSocket,
     tx: Sender<LinearOwnedReusable<Payload>>,
-    pool: Arc<LinearObjectPool<Payload>>,
 ) {
     let mut last_print_time = Instant::now();
     let print_interval = Duration::from_secs(2);
 
     let mut next_cnt = None;
     let mut ndropped = 0;
+    let pool: Arc<LinearObjectPool<Payload>>=Arc::new(LinearObjectPool::new(
+        move || {
+            eprint!(".");
+            Payload::default()
+        },
+        |v| {
+            v.pkt_cnt = 0;
+            v.data.fill(0);
+        },
+    ));
+
 
     loop {
         let now = Instant::now();

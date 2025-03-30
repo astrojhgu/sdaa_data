@@ -37,23 +37,9 @@ fn main() {
     let socket = UdpSocket::bind(&args.local_addr).unwrap();
     let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(1024);
 
-    let buf_cnt = Arc::new(Mutex::new(0));
-    let buf_cnt1 = Arc::clone(&buf_cnt);
-    let pool = Arc::new(LinearObjectPool::new(
-        move || {
-            eprint!(".");
-            let mut cnt = buf_cnt1.lock().unwrap();
-            *cnt += 1;
-            Payload::default()
-        },
-        |v| {
-            v.pkt_cnt = 0;
-            v.data.fill(0);
-        },
-    ));
-
-    let pool1 = Arc::clone(&pool);
-    std::thread::spawn(|| recv_pkt(socket, tx, pool1));
+    
+    //let pool1 = Arc::clone(&pool);
+    std::thread::spawn(|| recv_pkt(socket, tx));
 
     let mut npkt_to_dump = 0;
     let mut dump_file = None;
@@ -63,9 +49,8 @@ fn main() {
         let payload = rx.recv().unwrap();
         if payload.pkt_cnt % 100000 == 0 {
             println!(
-                "cnt: {} pool cnt: {} queue cnt: {}",
+                "cnt: {} queue cnt: {}",
                 payload.pkt_cnt,
-                buf_cnt.lock().unwrap(),
                 rx.len()
             );
         }

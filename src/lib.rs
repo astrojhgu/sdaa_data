@@ -1,7 +1,10 @@
-pub mod payload;
-pub mod utils;
-pub mod pipeline;
-pub mod ddc;
+#![feature(portable_simd)]
 
-type RawType=i16;
+pub mod ddc;
+pub mod fir;
+pub mod payload;
+pub mod pipeline;
+pub mod utils;
+
+pub type RawType = i16;
 pub type Ftype = f32;
