@@ -16,10 +16,10 @@ use clap::Parser;
 use crossbeam::channel::bounded;
 use sdaa_data::{
     ddc::ddc_x8,
-    payload::Payload,
+    payload::{Payload, N_PT_PER_FRAME},
     pipeline::recv_pkt,
     utils::{as_u8_slice, slice_as_u8},
-    Ftype,
+    Ftype, RAW_SAMP_RATE,
 };
 
 #[derive(Parser, Debug)]
@@ -36,6 +36,9 @@ struct Args {
 
     #[clap(short = 'm', value_name = "dumps per npkt", default_value("100000"))]
     dump_per_npkt: usize,
+
+    #[clap(short = 'l', long="lo", value_name="lo freq in MHz", default_value("100.0"))]
+    lo_megahz: f64
 }
 
 fn main() {
@@ -49,7 +52,11 @@ fn main() {
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx_payload));
 
-    std::thread::spawn(|| ddc_x8(rx_payload, tx_ddc, 853));
+    let lo_freq=args.lo_megahz*1e6;
+    let max_freq=(RAW_SAMP_RATE/2)  as f64;
+    let lo_freq_ch=(lo_freq/max_freq*(N_PT_PER_FRAME/2) as f64) as usize;
+
+    std::thread::spawn(move || ddc_x8(rx_payload, tx_ddc, lo_freq_ch));
     let mut last_print_time = Instant::now();
     let mut last_printed_second = 0; // 记录上次打印的秒数
     let t0=Local::now();

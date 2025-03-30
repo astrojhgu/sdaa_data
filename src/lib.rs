@@ -8,3 +8,4 @@ pub mod utils;
 
 pub type RawType = i16;
 pub type Ftype = f32;
+pub const RAW_SAMP_RATE:usize=480_000_000;

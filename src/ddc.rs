@@ -27,7 +27,13 @@ pub fn ddc_x8(
     const TAP: usize = 24;
     const TAP_PER_CH: usize = TAP / NDEC;
 
-    let coeffs = design_lowpass_filter(TAP, 0.01, 5.0);
+    //let coeffs = design_lowpass_filter(TAP, 0.01, 20.0);
+    let coeffs = vec![
+        0., 0.00104512, 0.00453488, 0.01077978, 0.0197434, 0.0310162, 0.04384085, 0.0571874,
+        0.06986941, 0.08068603, 0.08857075, 0.09272619, 0.09272619, 0.08857075, 0.08068603,
+        0.06986941, 0.0571874, 0.04384085, 0.0310162, 0.0197434, 0.01077978, 0.00453488,
+        0.00104512, 0.,
+    ];
     let stat_len = NDEC * (TAP_PER_CH - 1);
 
     let lo: [Vec<_>; 2] = [
