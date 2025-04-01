@@ -1,11 +1,15 @@
 #![feature(portable_simd)]
 
-pub mod ddc;
 pub mod fir;
 pub mod payload;
 pub mod pipeline;
 pub mod utils;
+
+#[cfg(feature="cuda")]
 pub mod bindings;
+
+#[cfg(feature="cuda")]
+pub mod ddc;
 
 
 pub type RawType = i16;

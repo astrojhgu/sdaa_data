@@ -12,7 +12,9 @@ use rayon::{
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
 
+#[cfg(feature = "cuda")]
 use crate::ddc::DownConverter;
+
 use crate::{
     payload::{Payload, N_PT_PER_FRAME},
     utils::as_mut_u8_slice,
@@ -51,11 +53,11 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
         }
         if next_cnt.is_none() {
             next_cnt = Some(payload.pkt_cnt);
-            ndropped=0;
+            ndropped = 0;
         }
 
-        if payload.pkt_cnt==0{
-            ndropped=0;
+        if payload.pkt_cnt == 0 {
+            ndropped = 0;
         }
 
         while let Some(ref mut c) = next_cnt {
@@ -77,6 +79,8 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
     }
 }
 
+
+#[cfg(feature="cuda")]
 pub fn pkt_ddc(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,

@@ -21,3 +21,6 @@ bindgen = "0.71.1"
 
 [profile.release]
 opt-level=3
+
+[features]
+cuda = []
