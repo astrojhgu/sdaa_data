@@ -3,7 +3,7 @@ use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
 
 use clap::Parser;
 use crossbeam::channel::{bounded, Sender, Receiver};
-use sdaa_data::{
+use sdaa_cuddc::{
     payload::Payload,
     utils::{as_mut_u8_slice, as_u8_slice},
 };

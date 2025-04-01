@@ -1,120 +1,236 @@
-use std::{simd::Simd, sync::Arc};
-
-use crossbeam::channel::{Receiver, Sender};
-use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
-use num::{
-    traits::{FloatConst, Zero},
-    Complex,
-};
+use num::Complex;
 
 use crate::{
-    fir::design_lowpass_filter,
-    payload::{Payload, N_PT_PER_FRAME},
-    Ftype,
+    bindings::{self, fcomplex, DDCResources},
+    payload::N_PT_PER_FRAME,
 };
+use std::os::raw::c_int;
 
-pub fn ddc_x8(
-    rx: Receiver<LinearOwnedReusable<Payload>>,
-    tx: Sender<LinearOwnedReusable<Vec<Complex<Ftype>>>>,
-    lo_freq_ch: usize,
-) {
-    const NDEC: usize = 8;
-    let pool = Arc::new(LinearObjectPool::<Vec<Complex<Ftype>>>::new(
-        move || vec![Complex::default(); N_PT_PER_FRAME / NDEC],
-        |_| {},
-    ));
+pub struct DownConverter {
+    pub n_out_data: usize,
+    res: DDCResources,
+}
 
-    const TAP: usize = 24;
-    const TAP_PER_CH: usize = TAP / NDEC;
+impl DownConverter {
+    pub fn new(ndec: usize, lo_cos: &[f32], lo_sin: &[f32], fir_coeffs: &[f32]) -> Self {
+        let k = fir_coeffs.len() / ndec;
+        assert_eq!(ndec * k, fir_coeffs.len());
+        assert_eq!(lo_sin.len(), crate::payload::N_PT_PER_FRAME);
+        assert_eq!(lo_cos.len(), crate::payload::N_PT_PER_FRAME);
 
-    //let coeffs = design_lowpass_filter(TAP, 0.01, 20.0);
-    let coeffs = vec![
-        0., 0.00104512, 0.00453488, 0.01077978, 0.0197434, 0.0310162, 0.04384085, 0.0571874,
-        0.06986941, 0.08068603, 0.08857075, 0.09272619, 0.09272619, 0.08857075, 0.08068603,
-        0.06986941, 0.0571874, 0.04384085, 0.0310162, 0.0197434, 0.01077978, 0.00453488,
-        0.00104512, 0.,
-    ];
-    let stat_len = NDEC * (TAP_PER_CH - 1);
+        let mut res = DDCResources {
+            d_indata: std::ptr::null_mut(),
+            K: k as i32,
+            NDEC: ndec as i32,
+            d_fir_coeffs: std::ptr::null_mut(),
+            d_lo_cos: std::ptr::null_mut(),
+            d_lo_sin: std::ptr::null_mut(),
+            d_outdata: std::ptr::null_mut(),
+            gpu_buffer: std::ptr::null_mut(),
+            h_indata: std::ptr::null_mut(),
+            h_index: 0,
+        };
+        unsafe {
+            crate::bindings::init_ddc_resources(
+                (&mut res) as *mut DDCResources,
+                ndec as c_int,
+                k as c_int,
+                lo_cos.as_ptr(),
+                lo_sin.as_ptr(),
+                fir_coeffs.as_ptr(),
+            );
+        }
 
-    let lo: [Vec<_>; 2] = [
-        (0..N_PT_PER_FRAME)
-            .map(|i| {
-                (lo_freq_ch as Ftype * i as Ftype / N_PT_PER_FRAME as Ftype * 2.0 * Ftype::PI())
-                    .cos()
-            })
-            .collect(),
-        (0..N_PT_PER_FRAME)
-            .map(|i| {
-                -(lo_freq_ch as Ftype * i as Ftype / N_PT_PER_FRAME as Ftype * 2.0 * Ftype::PI())
-                    .sin()
-            })
-            .collect(),
-    ];
-
-    let mut buffer = [
-        vec![Ftype::zero(); stat_len + N_PT_PER_FRAME],
-        vec![Ftype::zero(); stat_len + N_PT_PER_FRAME],
-    ];
-
-    let mut result1 = [
-        vec![Ftype::zero(); N_PT_PER_FRAME / NDEC],
-        vec![Ftype::zero(); N_PT_PER_FRAME / NDEC],
-    ];
-
-    let c = Simd::<Ftype, TAP>::from_slice(coeffs.as_slice());
-
-    loop {
-        let payload = rx.recv().unwrap();
-        let x = &payload.data;
-        let mut result = pool.pull_owned();
-        buffer
-            .iter_mut()
-            .zip(&mut result1)
-            .zip(&lo)
-            .enumerate()
-            .for_each(|(j, ((b, r), lo1))| {
-                b[stat_len..]
-                    .iter_mut()
-                    .zip(x.iter())
-                    .zip(lo1.iter())
-                    .for_each(|((b1, &x1), &lo1)| {
-                        *b1 = (x1 as Ftype) * lo1;
-                    });
-
-                // let mut f =
-                //     File::create(format!("buffer_{}.dat", if j == 0 { "i" } else { "q" })).unwrap();
-                // f.write_all(slice_as_u8(&b)).unwrap();
-
-                b.windows(TAP)
-                    .step_by(NDEC)
-                    .zip(r.iter_mut())
-                    .for_each(|(x, r)| {
-                        let x = Simd::<Ftype, TAP>::from_slice(x);
-                        let z = x * c;
-                        let z = z.to_array();
-                        *r = z.iter().cloned().sum();
-                        //*r = x.iter().zip(coeffs.iter()).map(|(&a, &b)| a * b).sum();
-                        //*r = x[0];
-                    });
-
-                // let mut f =
-                //     File::create(format!("filtered_{}.dat", if j == 0 { "i" } else { "q" }))
-                //         .unwrap();
-                // f.write_all(slice_as_u8(&r)).unwrap();
-
-                //println!("{} {}", cnt1, cnt2);
-                let stat_idx = b.len() - stat_len;
-                b.copy_within(stat_idx.., 0);
-            });
-
-        result
-            .iter_mut()
-            .zip(result1[0].iter().zip(result1[1].iter()))
-            .for_each(|(r, (&ri, &rq))| {
-                r.re = ri;
-                r.im = rq;
-            });
-
-        tx.send(result).unwrap();
+        let n_out_data =
+            unsafe { bindings::calc_output_size((&mut res) as *mut DDCResources) as usize };
+        Self { n_out_data, res }
     }
+
+    pub fn ddc(&mut self, indata: &[i16], outdata: &mut [Complex<f32>]) -> bool {
+        assert_eq!(indata.len(), N_PT_PER_FRAME);
+        assert_eq!(outdata.len(), self.n_out_data);
+        let result = unsafe {
+            bindings::ddc(
+                indata.as_ptr(),
+                outdata.as_mut_ptr() as *mut fcomplex,
+                (&mut self.res) as *mut DDCResources,
+            )
+        };
+        assert!(result >= 0);
+        result != 0
+    }
+}
+
+impl Drop for DownConverter {
+    fn drop(&mut self) {
+        unsafe { crate::bindings::free_ddc_resources((&mut self.res) as *mut DDCResources) };
+    }
+}
+
+pub fn fir_coeffs1() -> Vec<f32> {
+    vec![
+        -8.30829935e-05,
+        -1.00714599e-04,
+        -1.17997389e-04,
+        -1.34282160e-04,
+        -1.48821308e-04,
+        -1.60767935e-04,
+        -1.69176312e-04,
+        -1.73003787e-04,
+        -1.71114210e-04,
+        -1.62282942e-04,
+        -1.45203459e-04,
+        -1.18495597e-04,
+        -8.07153875e-05,
+        -3.03664859e-05,
+        3.40868919e-05,
+        1.14205597e-04,
+        2.11559855e-04,
+        3.27712375e-04,
+        4.64200435e-04,
+        6.22517104e-04,
+        8.04091808e-04,
+        1.01027046e-03,
+        1.24229535e-03,
+        1.50128515e-03,
+        1.78821509e-03,
+        2.10389778e-03,
+        2.44896483e-03,
+        2.82384948e-03,
+        3.22877068e-03,
+        3.66371865e-03,
+        4.12844236e-03,
+        4.62243896e-03,
+        5.14494559e-03,
+        5.69493352e-03,
+        6.27110495e-03,
+        6.87189251e-03,
+        7.49546162e-03,
+        8.13971567e-03,
+        8.80230422e-03,
+        9.48063398e-03,
+        1.01718828e-02,
+        1.08730165e-02,
+        1.15808079e-02,
+        1.22918593e-02,
+        1.30026263e-02,
+        1.37094443e-02,
+        1.44085572e-02,
+        1.50961464e-02,
+        1.57683630e-02,
+        1.64213591e-02,
+        1.70513210e-02,
+        1.76545022e-02,
+        1.82272565e-02,
+        1.87660701e-02,
+        1.92675941e-02,
+        1.97286744e-02,
+        2.01463811e-02,
+        2.05180355e-02,
+        2.08412357e-02,
+        2.11138784e-02,
+        2.13341797e-02,
+        2.15006913e-02,
+        2.16123148e-02,
+        2.16683120e-02,
+        2.16683120e-02,
+        2.16123148e-02,
+        2.15006913e-02,
+        2.13341797e-02,
+        2.11138784e-02,
+        2.08412357e-02,
+        2.05180355e-02,
+        2.01463811e-02,
+        1.97286744e-02,
+        1.92675941e-02,
+        1.87660701e-02,
+        1.82272565e-02,
+        1.76545022e-02,
+        1.70513210e-02,
+        1.64213591e-02,
+        1.57683630e-02,
+        1.50961464e-02,
+        1.44085572e-02,
+        1.37094443e-02,
+        1.30026263e-02,
+        1.22918593e-02,
+        1.15808079e-02,
+        1.08730165e-02,
+        1.01718828e-02,
+        9.48063398e-03,
+        8.80230422e-03,
+        8.13971567e-03,
+        7.49546162e-03,
+        6.87189251e-03,
+        6.27110495e-03,
+        5.69493352e-03,
+        5.14494559e-03,
+        4.62243896e-03,
+        4.12844236e-03,
+        3.66371865e-03,
+        3.22877068e-03,
+        2.82384948e-03,
+        2.44896483e-03,
+        2.10389778e-03,
+        1.78821509e-03,
+        1.50128515e-03,
+        1.24229535e-03,
+        1.01027046e-03,
+        8.04091808e-04,
+        6.22517104e-04,
+        4.64200435e-04,
+        3.27712375e-04,
+        2.11559855e-04,
+        1.14205597e-04,
+        3.40868919e-05,
+        -3.03664859e-05,
+        -8.07153875e-05,
+        -1.18495597e-04,
+        -1.45203459e-04,
+        -1.62282942e-04,
+        -1.71114210e-04,
+        -1.73003787e-04,
+        -1.69176312e-04,
+        -1.60767935e-04,
+        -1.48821308e-04,
+        -1.34282160e-04,
+        -1.17997389e-04,
+        -1.00714599e-04,
+        -8.30829935e-05,
+    ]
+}
+
+pub fn fir_coeffs2() -> Vec<f32> {
+    vec![1.24919278e-04,  1.87340062e-04,  2.54336466e-04,  3.19419542e-04,
+    3.74655087e-04,  4.11165271e-04,  4.19813565e-04,  3.92038171e-04,
+    3.20780621e-04,  2.01440077e-04,  3.27717133e-05, -1.82358899e-04,
+   -4.36453212e-04, -7.17168929e-04, -1.00748549e-03, -1.28628744e-03,
+   -1.52937838e-03, -1.71090455e-03, -1.80513157e-03, -1.78848233e-03,
+   -1.64171198e-03, -1.35207001e-03, -9.15281892e-04, -3.37176770e-04,
+    3.65206597e-04,  1.16318370e-03,  2.01677387e-03,  2.87590733e-03,
+    3.68250762e-03,  4.37340718e-03,  4.88399089e-03,  5.15240109e-03,
+    5.12408244e-03,  4.75640038e-03,  4.02303662e-03,  2.91785302e-03,
+    1.45792206e-03, -3.14549107e-04, -2.33162605e-03, -4.50054372e-03,
+   -6.70616835e-03, -8.81500806e-03, -1.06806578e-02, -1.21504677e-02,
+   -1.30731356e-02, -1.33068463e-02, -1.27275284e-02, -1.12367619e-02,
+   -8.76886842e-03, -5.29673644e-03, -8.35986530e-04,  4.55284086e-03,
+    1.07642930e-02,  1.76503082e-02,  2.50247886e-02,  3.26702858e-02,
+    4.03465187e-02,  4.78003304e-02,  5.47766012e-02,  6.10295684e-02,
+    6.63339694e-02,  7.04954233e-02,  7.33595010e-02,  7.48189943e-02,
+    7.48189943e-02,  7.33595010e-02,  7.04954233e-02,  6.63339694e-02,
+    6.10295684e-02,  5.47766012e-02,  4.78003304e-02,  4.03465187e-02,
+    3.26702858e-02,  2.50247886e-02,  1.76503082e-02,  1.07642930e-02,
+    4.55284086e-03, -8.35986530e-04, -5.29673644e-03, -8.76886842e-03,
+   -1.12367619e-02, -1.27275284e-02, -1.33068463e-02, -1.30731356e-02,
+   -1.21504677e-02, -1.06806578e-02, -8.81500806e-03, -6.70616835e-03,
+   -4.50054372e-03, -2.33162605e-03, -3.14549107e-04,  1.45792206e-03,
+    2.91785302e-03,  4.02303662e-03,  4.75640038e-03,  5.12408244e-03,
+    5.15240109e-03,  4.88399089e-03,  4.37340718e-03,  3.68250762e-03,
+    2.87590733e-03,  2.01677387e-03,  1.16318370e-03,  3.65206597e-04,
+   -3.37176770e-04, -9.15281892e-04, -1.35207001e-03, -1.64171198e-03,
+   -1.78848233e-03, -1.80513157e-03, -1.71090455e-03, -1.52937838e-03,
+   -1.28628744e-03, -1.00748549e-03, -7.17168929e-04, -4.36453212e-04,
+   -1.82358899e-04,  3.27717133e-05,  2.01440077e-04,  3.20780621e-04,
+    3.92038171e-04,  4.19813565e-04,  4.11165271e-04,  3.74655087e-04,
+    3.19419542e-04,  2.54336466e-04,  1.87340062e-04,  1.24919278e-04]
 }

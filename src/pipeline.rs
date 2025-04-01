@@ -1,3 +1,4 @@
+use std::default;
 use std::time::{Duration, Instant};
 use std::{net::UdpSocket, sync::Arc};
 
@@ -11,21 +12,19 @@ use rayon::{
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
 
+use crate::ddc::DownConverter;
 use crate::{
     payload::{Payload, N_PT_PER_FRAME},
     utils::as_mut_u8_slice,
 };
 
-pub fn recv_pkt(
-    socket: UdpSocket,
-    tx: Sender<LinearOwnedReusable<Payload>>,
-) {
+pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
     let mut last_print_time = Instant::now();
     let print_interval = Duration::from_secs(2);
 
     let mut next_cnt = None;
     let mut ndropped = 0;
-    let pool: Arc<LinearObjectPool<Payload>>=Arc::new(LinearObjectPool::new(
+    let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
         move || {
             eprint!(".");
             Payload::default()
@@ -35,7 +34,6 @@ pub fn recv_pkt(
             v.data.fill(0);
         },
     ));
-
 
     loop {
         let now = Instant::now();
@@ -53,6 +51,11 @@ pub fn recv_pkt(
         }
         if next_cnt.is_none() {
             next_cnt = Some(payload.pkt_cnt);
+            ndropped=0;
+        }
+
+        if payload.pkt_cnt==0{
+            ndropped=0;
         }
 
         while let Some(ref mut c) = next_cnt {
@@ -70,6 +73,36 @@ pub fn recv_pkt(
             payload1.pkt_cnt = *c;
             tx.send(payload1).unwrap();
             *c += 1;
+        }
+    }
+}
+
+pub fn pkt_ddc(
+    rx: Receiver<LinearOwnedReusable<Payload>>,
+    tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,
+    ndec: usize,
+    lo_cos: &[f32],
+    lo_sin: &[f32],
+    fir_coeffs: &[f32],
+) {
+    let mut ddc = DownConverter::new(ndec, lo_cos, lo_sin, fir_coeffs);
+
+    let pool: Arc<LinearObjectPool<Vec<Complex<f32>>>> = Arc::new(LinearObjectPool::new(
+        move || {
+            eprint!(".");
+            vec![Complex::<f32>::default(); ddc.n_out_data]
+        },
+        |v| {},
+    ));
+
+    loop {
+        let mut outdata = pool.pull_owned();
+        loop {
+            let payload = rx.recv().unwrap();
+            if ddc.ddc(&payload.data, &mut outdata) {
+                tx.send(outdata).unwrap();
+                break;
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ use std::{
 
 use clap::Parser;
 use crossbeam::channel::bounded;
-use sdaa_data::{
+use sdaa_cuddc::{
     payload::Payload,
     pipeline::recv_pkt,
     utils::as_u8_slice,
