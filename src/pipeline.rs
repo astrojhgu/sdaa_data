@@ -12,7 +12,7 @@ use rayon::{
 use realfft::RealFftPlanner;
 use rustfft::num_complex::Complex;
 
-#[cfg(feature = "cuda")]
+#[cfg(not(feature = "no_cuda"))]
 use crate::ddc::DownConverter;
 
 use crate::{
@@ -80,7 +80,7 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
 }
 
 
-#[cfg(feature="cuda")]
+#[cfg(not(feature="no_cuda"))]
 pub fn pkt_ddc(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,

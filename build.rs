@@ -1,7 +1,7 @@
 use std::{env::var, path::PathBuf};
 
 pub fn main() {
-    #[cfg(feature = "cuda")]
+    #[cfg(not(feature = "no_cuda"))]
     {
         println!("cargo:rustc-link-search=../cuddc");
         println!("cargo:rustc-link-lib=cuddc");

@@ -5,10 +5,10 @@ pub mod payload;
 pub mod pipeline;
 pub mod utils;
 
-#[cfg(feature="cuda")]
+#[cfg(not(feature="no_cuda"))]
 pub mod bindings;
 
-#[cfg(feature="cuda")]
+#[cfg(not(feature="no_cuda"))]
 pub mod ddc;
 
 

@@ -10,7 +10,7 @@ use clap::Parser;
 use crossbeam::channel::bounded;
 use num::{traits::FloatConst, Complex};
 
-#[cfg(feature = "cuda")]
+#[cfg(not(feature = "no_cuda"))]
 use sdaa_data::{ddc::fir_coeffs2 as fir_coeffs, pipeline::pkt_ddc};
 
 use sdaa_data::{
@@ -33,7 +33,7 @@ struct Args {
     lo_ch: isize,
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(not(feature = "no_cuda"))]
 fn main() {
     //let (tx,rx)=bounded(256);
     let args = Args::parse();
@@ -75,5 +75,5 @@ fn main() {
     }
 }
 
-#[cfg(not(feature = "cuda"))]
+#[cfg(feature = "no_cuda")]
 fn main() {}

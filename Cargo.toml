@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = {version ='^4.5.18', features = ['derive']}
+clap = {version ='4.5.35', features = ['derive']}
 realfft = "3.4.0"
 rustfft = "6.2.0"
 tokio = {version="1.44.1", features=["full"]}
@@ -23,4 +23,5 @@ bindgen = "0.71.1"
 opt-level=3
 
 [features]
-cuda = []
+default=[]
+no_cuda = []
