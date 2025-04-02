@@ -85,11 +85,10 @@ pub fn pkt_ddc(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,
     ndec: usize,
-    lo_cos: &[f32],
-    lo_sin: &[f32],
+    lo_ch: isize, 
     fir_coeffs: &[f32],
 ) {
-    let mut ddc = DownConverter::new(ndec, lo_cos, lo_sin, fir_coeffs);
+    let mut ddc = DownConverter::new(ndec, fir_coeffs);
 
     let pool: Arc<LinearObjectPool<Vec<Complex<f32>>>> = Arc::new(LinearObjectPool::new(
         move || {
@@ -100,10 +99,11 @@ pub fn pkt_ddc(
     ));
 
     loop {
-        let mut outdata = pool.pull_owned();
         loop {
             let payload = rx.recv().unwrap();
-            if ddc.ddc(&payload.data, &mut outdata) {
+            if ddc.ddc(&payload.data,lo_ch) {
+                let mut outdata = pool.pull_owned();
+                ddc.fetch_output(&mut outdata);
                 tx.send(outdata).unwrap();
                 break;
             }

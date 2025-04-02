@@ -47,16 +47,10 @@ fn main() {
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx_payload));
     std::thread::spawn(move || {
-        let lo_cos: Vec<_> = (0..N_PT_PER_FRAME)
-            .map(|i| ((i as isize * lo_ch) as f32 / N_PT_PER_FRAME as f32 * 2.0 * f32::PI()).cos())
-            .collect();
-
-        let lo_sin: Vec<_> = (0..N_PT_PER_FRAME)
-            .map(|i| -((i as isize * lo_ch) as f32 / N_PT_PER_FRAME as f32 * 2.0 * f32::PI()).sin())
-            .collect();
+        
 
         let fir_coeffs = fir_coeffs();
-        pkt_ddc(rx_payload, tx_ddc, 8, &lo_cos, &lo_sin, &fir_coeffs);
+        pkt_ddc(rx_payload, tx_ddc, 8, lo_ch, &fir_coeffs);
     });
 
     let mut bytes_written = 0;

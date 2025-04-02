@@ -12,11 +12,10 @@ pub struct DownConverter {
 }
 
 impl DownConverter {
-    pub fn new(ndec: usize, lo_cos: &[f32], lo_sin: &[f32], fir_coeffs: &[f32]) -> Self {
+    pub fn new(ndec: usize, fir_coeffs: &[f32]) -> Self {
         let k = fir_coeffs.len() / ndec;
         assert_eq!(ndec * k, fir_coeffs.len());
-        assert_eq!(lo_sin.len(), crate::payload::N_PT_PER_FRAME);
-        assert_eq!(lo_cos.len(), crate::payload::N_PT_PER_FRAME);
+        
 
         let mut res = DDCResources {
             d_indata: std::ptr::null_mut(),
@@ -25,8 +24,6 @@ impl DownConverter {
             M: 8192,
             NDEC: ndec as i32,
             d_fir_coeffs: std::ptr::null_mut(),
-            d_lo_cos: std::ptr::null_mut(),
-            d_lo_sin: std::ptr::null_mut(),
             d_outdata: std::ptr::null_mut(),
             gpu_buffer: std::ptr::null_mut(),
             h_indata: std::ptr::null_mut(),
@@ -39,8 +36,6 @@ impl DownConverter {
                 8192,
                 ndec as c_int,
                 k as c_int,
-                lo_cos.as_ptr(),
-                lo_sin.as_ptr(),
                 fir_coeffs.as_ptr(),
             );
         }
@@ -50,18 +45,23 @@ impl DownConverter {
         Self { n_out_data, res }
     }
 
-    pub fn ddc(&mut self, indata: &[i16], outdata: &mut [Complex<f32>]) -> bool {
+    pub fn ddc(&mut self, indata: &[i16], lo_ch: isize) -> bool {
         assert_eq!(indata.len(), N_PT_PER_FRAME);
-        assert_eq!(outdata.len(), self.n_out_data);
+        
         let result = unsafe {
             bindings::ddc(
                 indata.as_ptr(),
-                outdata.as_mut_ptr() as *mut fcomplex,
+                lo_ch as c_int,
                 (&mut self.res) as *mut DDCResources,
             )
         };
         assert!(result >= 0);
         result != 0
+    }
+
+    pub fn fetch_output(&mut self, outdata: &mut [Complex<f32>]){
+        assert_eq!(outdata.len(), self.n_out_data);
+        unsafe{bindings::fetch_output(outdata.as_mut_ptr() as *mut fcomplex, (&mut self.res) as *mut DDCResources)}
     }
 }
 
