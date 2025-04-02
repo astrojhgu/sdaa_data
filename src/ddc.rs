@@ -21,6 +21,8 @@ impl DownConverter {
         let mut res = DDCResources {
             d_indata: std::ptr::null_mut(),
             K: k as i32,
+            N: N_PT_PER_FRAME as i32,
+            M: 8192,
             NDEC: ndec as i32,
             d_fir_coeffs: std::ptr::null_mut(),
             d_lo_cos: std::ptr::null_mut(),
@@ -33,6 +35,8 @@ impl DownConverter {
         unsafe {
             crate::bindings::init_ddc_resources(
                 (&mut res) as *mut DDCResources,
+                N_PT_PER_FRAME as i32,
+                8192,
                 ndec as c_int,
                 k as c_int,
                 lo_cos.as_ptr(),
