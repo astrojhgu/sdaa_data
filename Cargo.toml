@@ -3,25 +3,31 @@ name = "sdaa_data"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "sdaa_data"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+
 [dependencies]
-clap = {version ='4.5.35', features = ['derive']}
+clap = { version = '4.5.35', features = ['derive'] }
 realfft = "3.4.0"
 rustfft = "6.2.0"
-tokio = {version="1.44.1", features=["full"]}
 lockfree-object-pool = '0.1.3'
 crossbeam = '0.8.4'
-rayon='1.10.0'
-chrono='0.4.40'
-num='0.4.3'
+rayon = '1.10.0'
+chrono = '0.4.40'
+num = '0.4.3'
 rand = "0.9.0"
-rand_distr='0.5.1'
+rand_distr = '0.5.1'
+fftw = "0.8.0"
+sdaa_ctrl = { path = '../sdaa_ctrl' }
 
 [build-dependencies]
 bindgen = "0.71.1"
 
 [profile.release]
-opt-level=3
+opt-level = 3
 
 [features]
-default=[]
+default = ["no_cuda"]
 no_cuda = []

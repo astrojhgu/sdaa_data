@@ -41,16 +41,15 @@ fn main() {
     let socket = UdpSocket::bind(&args.local_addr).unwrap();
     let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(8192);
     let (tx_ddc, rx_ddc) = bounded::<LinearOwnedReusable<Vec<Complex<f32>>>>(8192);
+    let (tx_lo_ch, rx_lo_ch) = bounded::<isize>(32);
 
-    let lo_ch = args.lo_ch;
+    tx_lo_ch.send(args.lo_ch);
     //assert!(lo_ch>512 && lo_ch<1536);
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx_payload));
     std::thread::spawn(move || {
-        
-
         let fir_coeffs = fir_coeffs();
-        pkt_ddc(rx_payload, tx_ddc, 8, lo_ch, &fir_coeffs);
+        pkt_ddc(rx_payload, tx_ddc, 8, rx_lo_ch, &fir_coeffs);
     });
 
     let mut bytes_written = 0;
