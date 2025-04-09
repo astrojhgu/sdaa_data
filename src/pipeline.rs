@@ -5,7 +5,7 @@ use chrono::Local;
 use crossbeam::channel::{Receiver, Sender};
 use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
 use rustfft::num_complex::Complex;
-use rustfft::{FftPlanner, FftPlannerAvx};
+use rustfft::FftPlanner;
 
 #[cfg(not(feature = "no_cuda"))]
 use crate::ddc::{fcomplex, DownConverter, DownConverter2};
