@@ -8,11 +8,7 @@ use std::{
 
 use clap::Parser;
 use crossbeam::channel::bounded;
-use sdaa_data::{
-    payload::Payload,
-    pipeline::recv_pkt,
-    utils::as_u8_slice,
-};
+use sdaa_data::{payload::Payload, pipeline::recv_pkt, utils::as_u8_slice};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -22,6 +18,9 @@ struct Args {
 
     #[clap(short = 'o', long = "out", value_name = "out name")]
     outname: Option<String>,
+
+    #[clap(short = 'O', long = "OUT", value_name = "out name for non overwrite")]
+    outname_no_overwrite: Option<String>,
 
     #[clap(short = 'n', value_name = "npkts_per_dump")]
     npkt_per_dump: usize,
@@ -37,7 +36,6 @@ fn main() {
     let socket = UdpSocket::bind(&args.local_addr).unwrap();
     let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(1024);
 
-    
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx));
 
@@ -45,14 +43,11 @@ fn main() {
     let mut dump_file = None;
 
     let mut old_cnt = None;
+    let mut outfile_no_overwrite = args.outname_no_overwrite.map(|n| File::create(&n).unwrap());
     loop {
         let payload = rx.recv().unwrap();
         if payload.pkt_cnt % 100000 == 0 {
-            println!(
-                "cnt: {} queue cnt: {}",
-                payload.pkt_cnt,
-                rx.len()
-            );
+            println!("cnt: {} queue cnt: {}", payload.pkt_cnt, rx.len());
         }
 
         if let Some(c) = old_cnt {
@@ -78,6 +73,11 @@ fn main() {
                 dump_file = None;
                 println!("dump file saved");
             }
+        }
+
+        if let Some(ref mut f) = outfile_no_overwrite {
+            let data = as_u8_slice(&payload.data);
+            f.write_all(data).unwrap();
         }
     }
 }
