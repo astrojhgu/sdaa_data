@@ -19,13 +19,20 @@ struct Args {
     #[clap(short = 'o', long = "out", value_name = "out name")]
     outname: Option<String>,
 
-    #[clap(short = 'O', long = "OUT", value_name = "out name for non overwrite")]
-    outname_no_overwrite: Option<String>,
+    #[clap(short = 'F', value_name = "out prefix for full dump file")]
+    full_dump_name: Option<String>,
 
-    #[clap(short = 'n', value_name = "npkts_per_dump")]
+    #[clap(
+        short = 'k',
+        value_name = "number of pkts per full dump file",
+        default_value = "1000000"
+    )]
+    npkt_per_full_dump: usize,
+
+    #[clap(short = 'n', value_name = "npkts_per_dump", default_value="100")]
     npkt_per_dump: usize,
 
-    #[clap(short = 'm', value_name = "dumps per npkt", default_value("100000"))]
+    #[clap(short = 'm', value_name = "dumps per npkt", default_value = "100000")]
     dump_per_npkt: usize,
 }
 
@@ -43,7 +50,13 @@ fn main() {
     let mut dump_file = None;
 
     let mut old_cnt = None;
-    let mut outfile_no_overwrite = args.outname_no_overwrite.map(|n| File::create(&n).unwrap());
+    let mut full_dump_cnt = 0;
+    let mut full_dump_file = args
+        .full_dump_name
+        .as_ref()
+        .map(|n| File::create(format!("{}{}.dat", &n, full_dump_cnt)).unwrap());
+    let mut npkts_full_dump = 0;
+
     loop {
         let payload = rx.recv().unwrap();
         if payload.pkt_cnt % 100000 == 0 {
@@ -75,9 +88,19 @@ fn main() {
             }
         }
 
-        if let Some(ref mut f) = outfile_no_overwrite {
+        if let Some(ref mut f) = full_dump_file {
             let data = as_u8_slice(&payload.data);
             f.write_all(data).unwrap();
+            npkts_full_dump += 1;
+
+            if npkts_full_dump == args.npkt_per_full_dump {
+                full_dump_cnt += 1;
+                full_dump_file = args
+                    .full_dump_name
+                    .as_ref()
+                    .map(|n| File::create(format!("{}{}.dat", n, full_dump_cnt)).unwrap());
+                npkts_full_dump=0;
+            }
         }
     }
 }
