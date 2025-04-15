@@ -62,12 +62,12 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
 
         while let Some(ref mut c) = next_cnt {
             //let current_cnt = c + 1;
-            if *c >= payload.pkt_cnt {
+            if *c >= payload.pkt_cnt {//actually = is sufficient.
                 *c = payload.pkt_cnt + 1;
-                if tx.is_full() {
+                //if tx.is_full() {
                     //eprint!("o");
-                    continue;
-                }
+                    //continue;
+                //}
                 if let Ok(()) = tx.send(payload) {
                     break;
                 } else {

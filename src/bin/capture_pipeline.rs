@@ -7,7 +7,7 @@ use std::{
 };
 
 use clap::Parser;
-use crossbeam::channel::bounded;
+use crossbeam::channel::unbounded;
 use sdaa_data::{payload::Payload, pipeline::recv_pkt, utils::as_u8_slice};
 
 #[derive(Parser, Debug)]
@@ -29,11 +29,14 @@ struct Args {
     )]
     npkt_per_full_dump: usize,
 
-    #[clap(short = 'n', value_name = "npkts_per_dump", default_value="100")]
+    #[clap(short = 'n', value_name = "npkts_per_dump", default_value = "100")]
     npkt_per_dump: usize,
 
     #[clap(short = 'm', value_name = "dumps per npkt", default_value = "100000")]
     dump_per_npkt: usize,
+
+    #[clap(short = 'p', value_name = "npkts to dump")]
+    npkts_to_recv: Option<usize>,
 }
 
 fn main() {
@@ -41,7 +44,8 @@ fn main() {
     let args = Args::parse();
 
     let socket = UdpSocket::bind(&args.local_addr).unwrap();
-    let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(1024);
+    //let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(65536);
+    let (tx, rx) = unbounded::<LinearOwnedReusable<Payload>>();
 
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx));
@@ -56,9 +60,11 @@ fn main() {
         .as_ref()
         .map(|n| File::create(format!("{}{}.dat", &n, full_dump_cnt)).unwrap());
     let mut npkts_full_dump = 0;
+    let mut total_npkts_received = 0;
 
     loop {
         let payload = rx.recv().unwrap();
+
         if payload.pkt_cnt % 100000 == 0 {
             println!("cnt: {} queue cnt: {}", payload.pkt_cnt, rx.len());
         }
@@ -99,8 +105,25 @@ fn main() {
                     .full_dump_name
                     .as_ref()
                     .map(|n| File::create(format!("{}{}.dat", n, full_dump_cnt)).unwrap());
-                npkts_full_dump=0;
+                npkts_full_dump = 0;
             }
+        }
+
+        total_npkts_received += 1;
+        if let Some(n) = args.npkts_to_recv {
+            if total_npkts_received == n {
+                break;
+            }
+        }
+
+        if payload.pkt_cnt == 0 {
+            full_dump_cnt = 0;
+            npkts_full_dump = 0;
+            total_npkts_received = 0;
+            full_dump_file = args
+                .full_dump_name
+                .as_ref()
+                .map(|n| File::create(format!("{}{}.dat", n, full_dump_cnt)).unwrap());
         }
     }
 }
