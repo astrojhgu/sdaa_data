@@ -27,13 +27,13 @@ impl Default for Payload {
     }
 }
 
-impl Payload{
-    pub fn copy_header(&mut self, rhs: &Self){
-        self.header=rhs.header;
-        self.version=rhs.version;
-        self.pkt_cnt=rhs.pkt_cnt;
-        self.base_id=rhs.base_id;
-        self.port_id=rhs.port_id;
-        self.npt_per_frame=rhs.npt_per_frame;
+impl Payload {
+    pub fn copy_header(&mut self, rhs: &Self) {
+        self.header = rhs.header;
+        self.version = rhs.version;
+        self.pkt_cnt = rhs.pkt_cnt;
+        self.base_id = rhs.base_id;
+        self.port_id = rhs.port_id;
+        self.npt_per_frame = rhs.npt_per_frame;
     }
 }

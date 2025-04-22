@@ -22,10 +22,7 @@ struct Args {
     dump_per_npkt: usize,
 }
 
-
-
 fn main() {
-
     //let (tx,rx)=bounded(256);
     let args = Args::parse();
 

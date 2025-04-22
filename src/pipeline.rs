@@ -229,7 +229,6 @@ pub fn pkt_ddc(
     eprintln!("channel broken, break from ddc");
 }
 
-
 /*
 #[cfg(feature = "cuda")]
 pub fn pkt_ddc_stage1(

@@ -1,9 +1,5 @@
 use lockfree_object_pool::LinearOwnedReusable;
-use std::{
-    fs::File,
-    io::Write,
-    net::UdpSocket,
-};
+use std::{fs::File, io::Write, net::UdpSocket};
 
 use clap::Parser;
 use crossbeam::channel::unbounded;
