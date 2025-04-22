@@ -5,14 +5,17 @@ pub mod payload;
 pub mod pipeline;
 pub mod utils;
 
-#[cfg(not(feature = "no_cuda"))]
+#[cfg(feature = "cuda")]
 pub mod bindings;
 
-#[cfg(not(feature = "no_cuda"))]
+#[cfg(feature = "cuda")]
 pub mod ddc;
 
-#[cfg(not(feature = "no_cuda"))]
+#[cfg(feature = "cuda")]
 pub mod c_interface;
+
+#[cfg(feature = "cuda")]
+pub mod sdr;
 
 
 pub type RawType = i16;

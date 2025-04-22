@@ -7,8 +7,8 @@ use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
 
-#[cfg(not(feature = "no_cuda"))]
-use crate::ddc::{fcomplex, DownConverter, DownConverter2};
+#[cfg(feature = "cuda")]
+use crate::ddc::DownConverter;
 
 use crate::{
     payload::{Payload, N_PT_PER_FRAME},
@@ -62,11 +62,12 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
 
         while let Some(ref mut c) = next_cnt {
             //let current_cnt = c + 1;
-            if *c >= payload.pkt_cnt {//actually = is sufficient.
+            if *c >= payload.pkt_cnt {
+                //actually = is sufficient.
                 *c = payload.pkt_cnt + 1;
                 //if tx.is_full() {
-                    //eprint!("o");
-                    //continue;
+                //eprint!("o");
+                //continue;
                 //}
                 if let Ok(()) = tx.send(payload) {
                     break;
@@ -106,7 +107,7 @@ pub fn pkt_fft(
             eprint!(".");
             vec![Complex::default(); nbuf / 2]
         },
-        |v| {},
+        |_v| {},
     ));
 
     let mut planner = FftPlanner::<f32>::new();
@@ -127,10 +128,10 @@ pub fn pkt_fft(
             offset = 0;
             fft.process(&mut buffer);
             let mut result = pool.pull_owned();
-            (&buffer)
+            buffer
                 .chunks(nch)
                 .step_by(2)
-                .zip((&mut result).chunks_mut(nch))
+                .zip(result.chunks_mut(nch))
                 .for_each(|(a, b)| {
                     b.copy_from_slice(a);
                 });
@@ -153,7 +154,7 @@ pub fn pkt_integrate(
             eprint!(".");
             vec![]
         },
-        |v| {},
+        |_v| {},
     ));
 
     loop {
@@ -178,12 +179,13 @@ pub fn pkt_integrate(
             }
         }
         if tx.send(result).is_err() {
-            return;
+            break;
         }
     }
+    eprintln!("channel broken, break from recv");
 }
 
-#[cfg(not(feature = "no_cuda"))]
+#[cfg(feature = "cuda")]
 pub fn pkt_ddc(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,
@@ -198,17 +200,17 @@ pub fn pkt_ddc(
             eprint!(".");
             vec![Complex::<f32>::default(); n_out_data]
         },
-        |v| {},
+        |_v| {},
     ));
-    let lo_ch = rx_lo_ch.recv().unwrap();
+    let mut lo_ch = rx_lo_ch.recv().unwrap();
 
     loop {
         if let Ok(payload) = rx.recv() {
-            let lo_ch = if let Ok(x) = rx_lo_ch.try_recv() {
-                x
-            } else {
-                lo_ch
-            };
+            if !rx_lo_ch.is_empty() {
+                if let Ok(x) = rx_lo_ch.recv() {
+                    lo_ch = x;
+                }
+            }
             if ddc.ddc(&payload.data, lo_ch) {
                 let mut outdata = pool.pull_owned();
                 ddc.fetch_output(&mut outdata);
@@ -217,13 +219,19 @@ pub fn pkt_ddc(
                     eprintln!("ddc channel full, discarding");
                     continue;
                 }
-                tx.send(outdata).unwrap();
+                if tx.send(outdata).is_err() {
+                    break;
+                }
             }
         }
     }
+    drop(rx);
+    eprintln!("channel broken, break from ddc");
 }
 
-#[cfg(not(feature = "no_cuda"))]
+
+/*
+#[cfg(feature = "cuda")]
 pub fn pkt_ddc_stage1(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<u64>,
@@ -232,48 +240,19 @@ pub fn pkt_ddc_stage1(
     fir_coeffs: &[f32],
 ) {
     let mut ddc = DownConverter::new(ndec, fir_coeffs);
-    let n_out_data = ddc.n_out_data();
+    let _n_out_data = ddc.n_out_data();
 
     loop {
         if let Ok(payload) = rx.recv() {
             if ddc.ddc(&payload.data, lo_ch) {
-                let p = unsafe { std::mem::transmute::<*const fcomplex, u64>(ddc.0.d_outdata) };
+                let p = ddc.0.d_outdata as *const fcomplex as u64;
                 tx.send(p).unwrap();
             }
         }
     }
 }
 
-#[cfg(not(feature = "no_cuda"))]
-pub fn pkt_ddc_stage2(
-    rx: Receiver<u64>,
-    tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,
-    ndec: usize,
-    lo_ch: isize,
-    fir_coeffs: &[f32],
-) {
-    use crate::ddc::M;
 
-    let mut ddc = DownConverter2::new(ndec, fir_coeffs, N_PT_PER_FRAME * M / ndec);
-    let n_out_data = ddc.n_out_data();
-
-    let n_output = ddc.n_out_data();
-    let pool = Arc::new(LinearObjectPool::new(
-        move || vec![Complex::<f32>::default(); n_output],
-        |_| {},
-    ));
-
-    loop {
-        let stage1_data =
-            unsafe { std::mem::transmute::<u64, *const fcomplex>(rx.recv().unwrap()) };
-        ddc.ddc(stage1_data, lo_ch);
-        let mut buf = pool.pull_owned();
-        ddc.fetch_output(&mut buf[..]);
-        tx.send(buf).unwrap();
-    }
-}
-
-/*
 pub fn calc_spectrum(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,

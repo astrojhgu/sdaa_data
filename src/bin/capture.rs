@@ -1,8 +1,6 @@
-use std::{fs::File, io::Write, net::UdpSocket, sync::Arc};
-use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
+use std::{fs::File, io::Write, net::UdpSocket};
 
 use clap::Parser;
-use crossbeam::channel::{bounded, Sender, Receiver};
 use sdaa_data::{
     payload::Payload,
     utils::{as_mut_u8_slice, as_u8_slice},

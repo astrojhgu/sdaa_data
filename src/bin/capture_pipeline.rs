@@ -1,9 +1,8 @@
-use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
+use lockfree_object_pool::LinearOwnedReusable;
 use std::{
     fs::File,
     io::Write,
     net::UdpSocket,
-    sync::{Arc, Mutex},
 };
 
 use clap::Parser;

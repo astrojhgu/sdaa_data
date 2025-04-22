@@ -1,3 +1,4 @@
+#![allow(static_mut_refs)]
 use std::{
     collections::BTreeMap,
     ffi::{c_char, c_ushort, CStr},
@@ -17,21 +18,24 @@ use crate::{
 
 use sdaa_ctrl::ctrl_msg::{send_cmd, CtrlMsg};
 
-static mut ddc_rx_handler: BTreeMap<u32, Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>> =
+static mut DDC_RX_HANDLER: BTreeMap<u32, Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>> =
     BTreeMap::new();
 
-static mut lo_rx_handler: BTreeMap<u32, Sender<isize>> = BTreeMap::new();
+static mut LO_RX_HANDLER: BTreeMap<u32, Sender<isize>> = BTreeMap::new();
 
 const NDEC: usize = 8;
 
 fn next_available_handle() -> u32 {
-    if unsafe { ddc_rx_handler.is_empty() } {
+    if unsafe { DDC_RX_HANDLER.is_empty() } {
         1
     } else {
-        unsafe { ddc_rx_handler.keys() }.cloned().max().unwrap() + 1
+        unsafe { DDC_RX_HANDLER.keys() }.cloned().max().unwrap() + 1
     }
 }
 
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
 pub unsafe extern "C" fn start_data_receiving(
     ctrl_ip: *const c_char,
@@ -70,7 +74,7 @@ pub unsafe extern "C" fn start_data_receiving(
     let (tx_ddc, rx_ddc) = bounded::<LinearOwnedReusable<Vec<Complex<f32>>>>(8192);
     let (tx_lo_ch, rx_lo_ch) = bounded::<isize>(32);
 
-    tx_lo_ch.send(lo_ch);
+    tx_lo_ch.send(lo_ch).unwrap();
 
     std::thread::spawn(|| recv_pkt(socket, tx_payload));
     std::thread::spawn(move || {
@@ -80,8 +84,8 @@ pub unsafe extern "C" fn start_data_receiving(
 
     let handle = next_available_handle();
 
-    unsafe { ddc_rx_handler.insert(handle, rx_ddc) };
-    unsafe { lo_rx_handler.insert(handle, tx_lo_ch) };
+    unsafe { DDC_RX_HANDLER.insert(handle, rx_ddc) };
+    unsafe { LO_RX_HANDLER.insert(handle, tx_lo_ch) };
 
     let cmd = CtrlMsg::StreamStart { msg_id: 0 };
     send_cmd(
@@ -95,6 +99,9 @@ pub unsafe extern "C" fn start_data_receiving(
     handle
 }
 
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
 pub unsafe extern "C" fn stop_data_receiving(
     ctrl_ip: *const c_char,
@@ -109,7 +116,7 @@ pub unsafe extern "C" fn stop_data_receiving(
     }];
 
     let c_str = CStr::from_ptr(data_ip);
-    let data_addr = if let Ok(s) = c_str.to_str() {
+    let _data_addr = if let Ok(s) = c_str.to_str() {
         format!("{}:{}", s, data_port)
     } else {
         return 0;
@@ -128,6 +135,9 @@ pub unsafe extern "C" fn stop_data_receiving(
     0
 }
 
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
 pub unsafe extern "C" fn get_mtu() -> usize {
     N_PT_PER_FRAME * M / NDEC

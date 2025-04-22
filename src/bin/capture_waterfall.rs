@@ -1,10 +1,9 @@
-use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
+use lockfree_object_pool::LinearOwnedReusable;
 use num::Complex;
 use std::{
     fs::File,
     io::Write,
     net::UdpSocket,
-    sync::{Arc, Mutex},
 };
 
 use clap::Parser;
@@ -12,7 +11,7 @@ use crossbeam::channel::bounded;
 use sdaa_data::{
     payload::Payload,
     pipeline::{pkt_fft, pkt_integrate, recv_pkt},
-    utils::{as_u8_slice, slice_as_u8},
+    utils::slice_as_u8,
 };
 
 #[derive(Parser, Debug)]
@@ -47,7 +46,7 @@ fn main() {
 
     //let mut dump_file = None;
     let mut outfile = args.outname.map(|outname| File::create(&outname).unwrap());
-    for i in 0.. {
+    for _i in 0.. {
         let x = rx_wf.recv().unwrap();
         outfile.iter_mut().for_each(|f| {
             f.write_all(slice_as_u8(&x[..])).unwrap();

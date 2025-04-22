@@ -15,5 +15,5 @@ where
 }
 
 pub fn slice_as_u8<T: Sized>(x: &[T]) -> &[u8] {
-    unsafe { from_raw_parts(x.as_ptr() as *const u8, std::mem::size_of::<T>() * x.len()) }
+    unsafe { from_raw_parts(x.as_ptr() as *const u8, std::mem::size_of_val(x)) }
 }
