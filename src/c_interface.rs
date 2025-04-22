@@ -1,4 +1,5 @@
 #![allow(static_mut_refs)]
+
 use std::{
     collections::BTreeMap,
     ffi::{c_char, c_ushort, CStr},
@@ -14,6 +15,7 @@ use crate::{
     ddc::{fir_coeffs2, M, N_PT_PER_FRAME},
     payload::Payload,
     pipeline::{pkt_ddc, recv_pkt},
+    sdr::Sdr,
 };
 
 use sdaa_ctrl::ctrl_msg::{send_cmd, CtrlMsg};
@@ -24,6 +26,60 @@ static mut DDC_RX_HANDLER: BTreeMap<u32, Receiver<LinearOwnedReusable<Vec<Comple
 static mut LO_RX_HANDLER: BTreeMap<u32, Sender<isize>> = BTreeMap::new();
 
 const NDEC: usize = 8;
+
+pub struct CSdr {
+    sdr_dev: Sdr,
+    rx_payload: Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
+    tx_lo_ch: Sender<isize>,
+    buffer: Option<LinearOwnedReusable<Vec<Complex<f32>>>>,
+    buffer_tail: usize,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn new_sdr_device(
+    remote_ctrl_addr: *const c_char,
+    local_ctrl_addr: *const c_char,
+    local_payload_addr: *const c_char,
+) -> *mut CSdr {
+    let remote_ctrl_addr = CStr::from_ptr(remote_ctrl_addr).to_str().unwrap();
+    let local_ctrl_addr = CStr::from_ptr(local_ctrl_addr).to_str().unwrap();
+    let local_payload_addr = CStr::from_ptr(local_payload_addr).to_str().unwrap();
+    let (sdr_dev, rx_payload, tx_lo_ch) = Sdr::new(
+        remote_ctrl_addr.parse().unwrap(),
+        local_ctrl_addr.parse().unwrap(),
+        local_payload_addr.parse().unwrap(),
+    );
+    Box::into_raw(Box::new(CSdr {
+        sdr_dev,
+        rx_payload,
+        tx_lo_ch,
+        buffer: None,
+        buffer_tail: 0,
+    }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
+    if !csdr.is_null() {
+        drop(unsafe { Box::from_raw(csdr) });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32){
+    if csdr.is_null() {
+        return;
+    }
+
+    let obj = unsafe { &mut *csdr };
+    obj.tx_lo_ch.send(lo_ch as isize).unwrap();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fetch_data(buf: *mut f32, npt: usize){
+    todo!()
+}
+
 
 fn next_available_handle() -> u32 {
     if unsafe { DDC_RX_HANDLER.is_empty() } {
