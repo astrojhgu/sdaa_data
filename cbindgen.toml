@@ -1,0 +1,6 @@
+language = "C++"
+include_guard = "SDAA_DATA_H"
+namespace = "sdaa"
+
+[defines]
+"feature=cuda" = "USE_CUDA"

@@ -20,53 +20,61 @@ use crate::{
 
 use sdaa_ctrl::ctrl_msg::{send_cmd, CtrlMsg};
 
-static mut DDC_RX_HANDLER: BTreeMap<u32, Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>> =
-    BTreeMap::new();
-
-static mut LO_RX_HANDLER: BTreeMap<u32, Sender<isize>> = BTreeMap::new();
-
-const NDEC: usize = 8;
+pub const NDEC: usize = 4;
 
 pub struct CSdr {
     sdr_dev: Sdr,
-    rx_payload: Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
+    rx_iq: Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
     tx_lo_ch: Sender<isize>,
     buffer: Option<LinearOwnedReusable<Vec<Complex<f32>>>>,
-    buffer_tail: usize,
+    cursor: usize,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CComplex {
+    pub re: f32,
+    pub im: f32,
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn new_sdr_device(
+pub extern "C" fn new_sdr_device(
     remote_ctrl_addr: *const c_char,
     local_ctrl_addr: *const c_char,
     local_payload_addr: *const c_char,
 ) -> *mut CSdr {
-    let remote_ctrl_addr = CStr::from_ptr(remote_ctrl_addr).to_str().unwrap();
-    let local_ctrl_addr = CStr::from_ptr(local_ctrl_addr).to_str().unwrap();
-    let local_payload_addr = CStr::from_ptr(local_payload_addr).to_str().unwrap();
-    let (sdr_dev, rx_payload, tx_lo_ch) = Sdr::new(
+    let remote_ctrl_addr = unsafe { CStr::from_ptr(remote_ctrl_addr).to_str().unwrap() };
+    let local_ctrl_addr = unsafe { CStr::from_ptr(local_ctrl_addr).to_str().unwrap() };
+    let local_payload_addr = unsafe { CStr::from_ptr(local_payload_addr).to_str().unwrap() };
+    let (sdr_dev, rx_iq, tx_lo_ch) = Sdr::new(
         remote_ctrl_addr.parse().unwrap(),
         local_ctrl_addr.parse().unwrap(),
         local_payload_addr.parse().unwrap(),
     );
+
+    sdr_dev.wakeup();
+    sdr_dev.wait_until_locked(60);
+    sdr_dev.init();
+    sdr_dev.sync();
+
     Box::into_raw(Box::new(CSdr {
         sdr_dev,
-        rx_payload,
+        rx_iq,
         tx_lo_ch,
         buffer: None,
-        buffer_tail: 0,
+        cursor: 0,
     }))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
+pub extern "C" fn free_sdr_device(csdr: *mut CSdr) {
     if !csdr.is_null() {
         drop(unsafe { Box::from_raw(csdr) });
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32){
+pub extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
     if csdr.is_null() {
         return;
     }
@@ -76,16 +84,32 @@ pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32){
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn fetch_data(buf: *mut f32, npt: usize){
-    todo!()
-}
+pub extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: usize) {
+    if csdr.is_null() {
+        return;
+    }
 
+    let obj = unsafe { &mut *csdr };
+    let buf = unsafe { std::slice::from_raw_parts_mut(buf as *mut Complex<f32>, npt) };
+    if obj.buffer.is_none() {
+        obj.buffer = Some(obj.rx_iq.recv().unwrap());
+        obj.cursor = 0;
+    }
 
-fn next_available_handle() -> u32 {
-    if unsafe { DDC_RX_HANDLER.is_empty() } {
-        1
-    } else {
-        unsafe { DDC_RX_HANDLER.keys() }.cloned().max().unwrap() + 1
+    let mut written = 0;
+    let total = npt;
+    while written < total {
+        let available = obj.buffer.as_ref().unwrap().len() - obj.cursor;
+        if available == 0 {
+            obj.buffer = Some(obj.rx_iq.recv().unwrap());
+            obj.cursor = 0;
+            continue;
+        }
+        let copy_len = (total - written).min(available);
+        buf[written..written + copy_len]
+            .copy_from_slice(&obj.buffer.as_ref().unwrap()[obj.cursor..obj.cursor + copy_len]);
+        obj.cursor += copy_len;
+        written += copy_len;
     }
 }
 
@@ -93,108 +117,18 @@ fn next_available_handle() -> u32 {
 ///
 /// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub unsafe extern "C" fn start_data_receiving(
-    ctrl_ip: *const c_char,
-    data_ip: *const c_char,
-    data_port: c_ushort,
-    lo_ch: isize,
-) -> u32 {
-    let c_str = CStr::from_ptr(ctrl_ip);
-    let ctrl_addr = vec![if let Ok(s) = c_str.to_str() {
-        format!("{}:3000", s)
-    } else {
-        return 0;
-    }];
-
-    let c_str = CStr::from_ptr(data_ip);
-    let data_addr = if let Ok(s) = c_str.to_str() {
-        format!("{}:{}", s, data_port)
-    } else {
-        return 0;
-    };
-
-    let local_addr = format!("0.0.0.0:{}", 3001);
-
-    let cmd = CtrlMsg::StreamStop { msg_id: 0 };
-    send_cmd(
-        cmd,
-        &ctrl_addr,
-        &local_addr,
-        Some(Duration::from_secs(10)),
-        10,
-    );
-
-    let socket = UdpSocket::bind(data_addr).unwrap();
-
-    let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(8192);
-    let (tx_ddc, rx_ddc) = bounded::<LinearOwnedReusable<Vec<Complex<f32>>>>(8192);
-    let (tx_lo_ch, rx_lo_ch) = bounded::<isize>(32);
-
-    tx_lo_ch.send(lo_ch).unwrap();
-
-    std::thread::spawn(|| recv_pkt(socket, tx_payload));
-    std::thread::spawn(move || {
-        let fir_coeffs = fir_coeffs2();
-        pkt_ddc(rx_payload, tx_ddc, NDEC, rx_lo_ch, &fir_coeffs);
-    });
-
-    let handle = next_available_handle();
-
-    unsafe { DDC_RX_HANDLER.insert(handle, rx_ddc) };
-    unsafe { LO_RX_HANDLER.insert(handle, tx_lo_ch) };
-
-    let cmd = CtrlMsg::StreamStart { msg_id: 0 };
-    send_cmd(
-        cmd,
-        &ctrl_addr,
-        &local_addr,
-        Some(Duration::from_secs(10)),
-        10,
-    );
-
-    handle
-}
-
-/// # Safety
-///
-/// This function should not be called before the horsemen are ready.
-#[no_mangle]
-pub unsafe extern "C" fn stop_data_receiving(
-    ctrl_ip: *const c_char,
-    data_ip: *const c_char,
-    data_port: c_ushort,
-) -> u32 {
-    let c_str = CStr::from_ptr(ctrl_ip);
-    let ctrl_addr = vec![if let Ok(s) = c_str.to_str() {
-        format!("{}:3000", s)
-    } else {
-        return 0;
-    }];
-
-    let c_str = CStr::from_ptr(data_ip);
-    let _data_addr = if let Ok(s) = c_str.to_str() {
-        format!("{}:{}", s, data_port)
-    } else {
-        return 0;
-    };
-
-    let local_addr = format!("0.0.0.0:{}", 3001);
-
-    let cmd = CtrlMsg::StreamStop { msg_id: 0 };
-    send_cmd(
-        cmd,
-        &ctrl_addr,
-        &local_addr,
-        Some(Duration::from_secs(10)),
-        10,
-    );
-    0
-}
-
-/// # Safety
-///
-/// This function should not be called before the horsemen are ready.
-#[no_mangle]
-pub unsafe extern "C" fn get_mtu() -> usize {
+pub extern "C" fn get_mtu() -> usize {
     N_PT_PER_FRAME * M / NDEC
+}
+
+#[no_mangle]
+pub extern "C" fn start_data_stream(csdr: *mut CSdr) {
+    let obj = unsafe { &mut *csdr };
+    obj.sdr_dev.stream_start();
+}
+
+#[no_mangle]
+pub extern "C" fn stop_data_stream(csdr: *mut CSdr) {
+    let obj = unsafe { &mut *csdr };
+    obj.sdr_dev.stream_stop();
 }
