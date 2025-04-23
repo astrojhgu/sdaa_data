@@ -44,7 +44,7 @@ pkgs.mkShell {
     sdrpp
     rust-bindgen
 
-    (python3.withPackages (ps: with ps; [numpy scipy matplotlib soapysdr ]))
+    (python3.withPackages (ps: with ps; [ numpy scipy matplotlib soapysdr ]))
   ];
   shellHook = ''
     export CUDA_PATH=${pkgs.cudatoolkit}
