@@ -1,6 +1,41 @@
-use std::{env::var, path::PathBuf};
+use std::{
+    env::var,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 pub fn main() {
+    println!("cargo:rerun-if-changed=src/");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+
+    // 获取 crate 根路径
+    let crate_dir = var("CARGO_MANIFEST_DIR").unwrap();
+    let include_dir = Path::new(&crate_dir).join("include");
+    if !include_dir.exists() {
+        fs::create_dir_all(&include_dir).expect("Failed to create include directory");
+    }
+
+    let header_path = include_dir.join("sdaa_data.h");
+
+    // 执行 cbindgen 命令
+    if let Ok(status) = Command::new("cbindgen")
+        .arg("--config")
+        .arg("cbindgen.toml") // 可选：可省略
+        .arg("--crate")
+        .arg("sdaa_ctrl") // ⚠️ 替换为你的 crate 名
+        .arg("--output")
+        .arg(header_path)
+        .current_dir(&crate_dir)
+        .status()
+    {
+        if !status.success() {
+            eprintln!("Warning: cbindgen failed");
+        }
+    } else {
+        eprintln!("Warning: cbindgen failed");
+    }
+
     #[cfg(feature = "cuda")]
     {
         println!("cargo:rustc-link-search=../cuddc");

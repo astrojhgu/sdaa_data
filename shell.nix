@@ -42,7 +42,7 @@ pkgs.mkShell {
     sdrangel
     sigdigger
     sdrpp
-    rust-bindgen
+    rust-cbindgen
 
     (python3.withPackages (ps: with ps; [ numpy scipy matplotlib soapysdr ]))
   ];
