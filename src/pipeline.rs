@@ -15,7 +15,15 @@ use crate::{
     utils::as_mut_u8_slice,
 };
 
-pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
+pub enum RecvCmd {
+    Destroy,
+}
+
+pub fn recv_pkt(
+    socket: UdpSocket,
+    tx_payload: Sender<LinearOwnedReusable<Payload>>,
+    rx_cmd: Receiver<RecvCmd>,
+) {
     let mut last_print_time = Instant::now();
     let print_interval = Duration::from_secs(2);
 
@@ -23,7 +31,7 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
     let mut ndropped = 0;
     let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
         move || {
-            //eprint!(".");
+            eprint!("o");
             Payload::default()
         },
         |v| {
@@ -31,21 +39,38 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
             v.data.fill(0);
         },
     ));
-
+    //socket.set_nonblocking(true).unwrap();
+    socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     loop {
+        if !rx_cmd.is_empty() {
+            match rx_cmd.recv().unwrap() {
+                RecvCmd::Destroy => break,
+            }
+        }
+        let mut payload = pool.pull_owned();
+        let buf = as_mut_u8_slice(&mut payload as &mut Payload);
+        match socket.recv_from(buf) {
+            Ok((s, _a)) => {
+                if s != std::mem::size_of::<Payload>() {
+                    continue;
+                }
+            }
+            _ => continue,
+        }
+
         let now = Instant::now();
 
         if now.duration_since(last_print_time) >= print_interval {
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S");
-            println!("{} {} pkts dropped q={}", local_time, ndropped, tx.len());
+            println!(
+                "{} {} pkts dropped q={}",
+                local_time,
+                ndropped,
+                tx_payload.len()
+            );
             last_print_time = now;
         }
-        let mut payload = pool.pull_owned();
-        let buf = as_mut_u8_slice(&mut payload as &mut Payload);
-        let (s, _a) = socket.recv_from(buf).unwrap();
-        if s != std::mem::size_of::<Payload>() {
-            continue;
-        }
+
         if next_cnt.is_none() {
             next_cnt = Some(payload.pkt_cnt);
             ndropped = 0;
@@ -65,11 +90,16 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
             if *c >= payload.pkt_cnt {
                 //actually = is sufficient.
                 *c = payload.pkt_cnt + 1;
-                //if tx.is_full() {
-                //eprint!("o");
-                //continue;
-                //}
-                if let Ok(()) = tx.send(payload) {
+                if tx_payload.is_full() {
+                    eprint!("O");
+                    if !rx_cmd.is_empty() {
+                        match rx_cmd.recv().unwrap() {
+                            RecvCmd::Destroy => return,
+                        }
+                    }
+                    continue;
+                }
+                if let Ok(()) = tx_payload.send(payload) {
                     break;
                 } else {
                     return;
@@ -81,13 +111,16 @@ pub fn recv_pkt(socket: UdpSocket, tx: Sender<LinearOwnedReusable<Payload>>) {
             let mut payload1 = pool.pull_owned();
             payload1.copy_header(&payload);
             payload1.pkt_cnt = *c;
-
-            if tx.is_full() {
-                //eprint!("o");
+            if tx_payload.is_full() {
+                eprint!("O");
+                if !rx_cmd.is_empty() {
+                    match rx_cmd.recv().unwrap() {
+                        RecvCmd::Destroy => return,
+                    }
+                }
                 continue;
             }
-
-            if tx.send(payload1).is_err() {
+            if tx_payload.send(payload1).is_err() {
                 return;
             }
             *c += 1;
@@ -182,7 +215,12 @@ pub fn pkt_integrate(
             break;
         }
     }
-    eprintln!("channel broken, break from recv");
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum DdcCmd {
+    LoCh(isize),
+    Destroy,
 }
 
 #[cfg(feature = "cuda")]
@@ -190,7 +228,8 @@ pub fn pkt_ddc(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<Complex<f32>>>>,
     ndec: usize,
-    rx_lo_ch: Receiver<isize>,
+    rx_ddc_cmd: Receiver<DdcCmd>,
+    tx_recv_cmd: Sender<RecvCmd>,
     fir_coeffs: &[f32],
 ) {
     let mut ddc = DownConverter::new(ndec, fir_coeffs);
@@ -202,15 +241,29 @@ pub fn pkt_ddc(
         },
         |_v| {},
     ));
-    let mut lo_ch = rx_lo_ch.recv().unwrap();
+
+    let mut lo_ch = if let DdcCmd::LoCh(c) = rx_ddc_cmd.recv().unwrap() {
+        c
+    } else {
+        N_PT_PER_FRAME as isize / 4
+    };
 
     loop {
-        if let Ok(payload) = rx.recv() {
-            if !rx_lo_ch.is_empty() {
-                if let Ok(x) = rx_lo_ch.recv() {
-                    lo_ch = x;
+        if !rx_ddc_cmd.is_empty() {
+            if let Ok(x) = rx_ddc_cmd.recv() {
+                match x {
+                    DdcCmd::LoCh(c) => {
+                        lo_ch = c;
+                    }
+                    DdcCmd::Destroy => {
+                        break;
+                    }
                 }
+            } else {
+                break;
             }
+        }
+        if let Ok(payload) = rx.recv_timeout(Duration::from_secs(1)) {
             if ddc.ddc(&payload.data, lo_ch) {
                 let mut outdata = pool.pull_owned();
                 ddc.fetch_output(&mut outdata);
@@ -219,14 +272,14 @@ pub fn pkt_ddc(
                     eprintln!("ddc channel full, discarding");
                     continue;
                 }
-                if tx.send(outdata).is_err() {
+                if tx.send_timeout(outdata, Duration::from_secs(1)).is_err() {
                     break;
                 }
             }
         }
     }
     drop(rx);
-    eprintln!("channel broken, break from ddc");
+    tx_recv_cmd.send(RecvCmd::Destroy).unwrap();
 }
 
 /*

@@ -1,40 +1,26 @@
-use std::{
-    env::var,
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{env::var, fs, path::PathBuf};
 
 pub fn main() {
     println!("cargo:rerun-if-changed=src/");
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=cbindgen.toml");
 
     // 获取 crate 根路径
     let crate_dir = var("CARGO_MANIFEST_DIR").unwrap();
-    let include_dir = Path::new(&crate_dir).join("include");
+    let include_dir = PathBuf::from(&crate_dir).join("include");
     if !include_dir.exists() {
         fs::create_dir_all(&include_dir).expect("Failed to create include directory");
     }
 
     let header_path = include_dir.join("sdaa_data.h");
 
-    // 执行 cbindgen 命令
-    if let Ok(status) = Command::new("cbindgen")
-        .arg("--config")
-        .arg("cbindgen.toml") // 可选：可省略
-        .arg("--crate")
-        .arg("sdaa_data") // ⚠️ 替换为你的 crate 名
-        .arg("--output")
-        .arg(header_path)
-        .current_dir(&crate_dir)
-        .status()
-    {
-        if !status.success() {
-            eprintln!("Warning: cbindgen failed");
-        }
-    } else {
-        eprintln!("Warning: cbindgen failed");
-    }
+    cbindgen::Builder::new()
+        .with_crate(crate_dir)
+        .with_config(cbindgen::Config::from_file("cbindgen.toml").unwrap())
+        .generate()
+        .unwrap()
+        .write_to_file(header_path);
 
     #[cfg(feature = "cuda")]
     {
@@ -42,6 +28,7 @@ pub fn main() {
         println!("cargo:rustc-link-lib=cuddc");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
         println!("cargo:rustc-link-lib=cudart");
+        //println!("cargo:rustc-link-lib=cuda");
         //println!("cargo:rustc-link-lib=stdc++");
 
         let header = PathBuf::from("../cuddc/ddc.h");

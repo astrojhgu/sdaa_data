@@ -22,6 +22,7 @@ sdaa_ctrl = { path = '../sdaa_ctrl' }
 
 [build-dependencies]
 bindgen = "0.71.1"
+cbindgen = "0.28.0"
 
 [profile.release]
 opt-level = 3

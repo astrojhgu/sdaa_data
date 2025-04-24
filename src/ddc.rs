@@ -11,6 +11,11 @@ unsafe impl Send for fcomplex {}
 unsafe impl Sync for fcomplex {}
 pub const M: usize = 8192;
 
+pub fn npt_ddc_per_dump(ndec: usize)->usize{
+    N_PT_PER_FRAME * M / ndec
+}
+
+
 pub struct DownConverter(pub DDCResources);
 
 impl DownConverter {

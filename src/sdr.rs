@@ -12,7 +12,7 @@ use sdaa_ctrl::ctrl_msg::{send_cmd, CmdReplySummary, CtrlMsg};
 use crate::{
     ddc::{fir_coeffs_half, N_PT_PER_FRAME},
     payload::Payload,
-    pipeline::{pkt_ddc, recv_pkt},
+    pipeline::{pkt_ddc, recv_pkt, DdcCmd, RecvCmd},
 };
 
 pub struct Sdr {
@@ -26,13 +26,13 @@ impl Drop for Sdr {
     fn drop(&mut self) {
         eprintln!("dropped");
         self.stream_stop();
-
-        let h = self.rx_thread.take();
+        let h = self.ddc_thread.take();
+        eprintln!("drop1");
         if let Some(h1) = h {
             if let Ok(()) = h1.join() {}
         }
-
-        let h = self.ddc_thread.take();
+        eprintln!("drop2");
+        let h = self.rx_thread.take();
         if let Some(h1) = h {
             if let Ok(()) = h1.join() {}
         }
@@ -48,7 +48,7 @@ impl Sdr {
     ) -> (
         Sdr,
         Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
-        Sender<isize>,
+        Sender<DdcCmd>,
     ) {
         let payload_socket = UdpSocket::bind(local_payload_addr).unwrap();
 
@@ -61,13 +61,16 @@ impl Sdr {
         );
         let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(8192);
         let (tx_ddc, rx_ddc) = bounded::<LinearOwnedReusable<Vec<Complex<f32>>>>(8192);
-        let (tx_lo_ch, rx_lo_ch) = bounded::<isize>(32);
+        let (tx_ddc_cmd, rx_ddc_cmd) = bounded::<DdcCmd>(32);
+        let (tx_recv_cmd, rx_recv_cmd) = bounded::<RecvCmd>(32);
 
-        tx_lo_ch.send(N_PT_PER_FRAME as isize / 4).unwrap();
-        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload));
+        tx_ddc_cmd
+            .send(DdcCmd::LoCh(N_PT_PER_FRAME as isize / 4))
+            .unwrap();
+        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
         let ddc_thread = std::thread::spawn(move || {
             let fir_coeffs = fir_coeffs_half();
-            pkt_ddc(rx_payload, tx_ddc, 4, rx_lo_ch, &fir_coeffs);
+            pkt_ddc(rx_payload, tx_ddc, 4, rx_ddc_cmd,tx_recv_cmd, &fir_coeffs);
         });
 
         (
@@ -78,7 +81,7 @@ impl Sdr {
                 local_ctrl_addr,
             },
             rx_ddc,
-            tx_lo_ch,
+            tx_ddc_cmd,
         )
     }
 

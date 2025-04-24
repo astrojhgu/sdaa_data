@@ -1,31 +1,26 @@
 #![allow(static_mut_refs)]
 
-use std::{
-    collections::BTreeMap,
-    ffi::{c_char, c_ushort, CStr},
-    net::UdpSocket,
-    time::Duration,
-};
+use std::
+    net::{Ipv4Addr, SocketAddrV4}
+;
 
-use crossbeam::channel::{bounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender};
 use lockfree_object_pool::LinearOwnedReusable;
 use num::Complex;
 
 use crate::{
-    ddc::{fir_coeffs2, M, N_PT_PER_FRAME},
-    payload::Payload,
-    pipeline::{pkt_ddc, recv_pkt},
+    ddc::{M, N_PT_PER_FRAME},
+    pipeline::DdcCmd,
     sdr::Sdr,
 };
 
-use sdaa_ctrl::ctrl_msg::{send_cmd, CtrlMsg};
 
 pub const NDEC: usize = 4;
 
 pub struct CSdr {
     sdr_dev: Sdr,
     rx_iq: Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
-    tx_lo_ch: Sender<isize>,
+    tx_cmd: Sender<DdcCmd>,
     buffer: Option<LinearOwnedReusable<Vec<Complex<f32>>>>,
     cursor: usize,
 }
@@ -39,18 +34,17 @@ pub struct CComplex {
 
 #[no_mangle]
 pub extern "C" fn new_sdr_device(
-    remote_ctrl_addr: *const c_char,
-    local_ctrl_addr: *const c_char,
-    local_payload_addr: *const c_char,
+    remote_ctrl_ip: u32,
+    local_ctrl_port: u16,
+    local_payload_ip: u32,
+    local_payload_port: u16,
 ) -> *mut CSdr {
-    let remote_ctrl_addr = unsafe { CStr::from_ptr(remote_ctrl_addr).to_str().unwrap() };
-    let local_ctrl_addr = unsafe { CStr::from_ptr(local_ctrl_addr).to_str().unwrap() };
-    let local_payload_addr = unsafe { CStr::from_ptr(local_payload_addr).to_str().unwrap() };
-    let (sdr_dev, rx_iq, tx_lo_ch) = Sdr::new(
-        remote_ctrl_addr.parse().unwrap(),
-        local_ctrl_addr.parse().unwrap(),
-        local_payload_addr.parse().unwrap(),
-    );
+    let remote_ctrl_addr = SocketAddrV4::new(Ipv4Addr::from(remote_ctrl_ip), 3000);
+    let local_ctrl_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), local_ctrl_port);
+    let local_payload_addr =
+        SocketAddrV4::new(Ipv4Addr::from(local_payload_ip), local_payload_port);
+
+    let (sdr_dev, rx_iq, tx_cmd) = Sdr::new(remote_ctrl_addr, local_ctrl_addr, local_payload_addr);
 
     sdr_dev.wakeup();
     sdr_dev.wait_until_locked(60);
@@ -60,31 +54,53 @@ pub extern "C" fn new_sdr_device(
     Box::into_raw(Box::new(CSdr {
         sdr_dev,
         rx_iq,
-        tx_lo_ch,
+        tx_cmd,
         buffer: None,
         cursor: 0,
     }))
 }
 
+
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub extern "C" fn free_sdr_device(csdr: *mut CSdr) {
+pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
     if !csdr.is_null() {
-        drop(unsafe { Box::from_raw(csdr) });
+        let obj = unsafe { Box::from_raw(csdr) };
+        let CSdr {
+            sdr_dev:_,
+            rx_iq,
+            tx_cmd,
+            buffer:_,
+            cursor:_,
+        } = *obj;
+        tx_cmd.send(DdcCmd::Destroy).unwrap();
+        drop(tx_cmd);
+        drop(rx_iq);
     }
 }
 
+
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
+pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
     if csdr.is_null() {
         return;
     }
 
     let obj = unsafe { &mut *csdr };
-    obj.tx_lo_ch.send(lo_ch as isize).unwrap();
+    obj.tx_cmd.send(DdcCmd::LoCh(lo_ch as isize)).unwrap();
 }
 
+
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: usize) {
+pub unsafe extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: usize) {
     if csdr.is_null() {
         return;
     }
@@ -121,14 +137,21 @@ pub extern "C" fn get_mtu() -> usize {
     N_PT_PER_FRAME * M / NDEC
 }
 
+
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub extern "C" fn start_data_stream(csdr: *mut CSdr) {
+pub unsafe extern "C" fn start_data_stream(csdr: *mut CSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.stream_start();
 }
 
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
-pub extern "C" fn stop_data_stream(csdr: *mut CSdr) {
+pub unsafe extern "C" fn stop_data_stream(csdr: *mut CSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.stream_stop();
 }

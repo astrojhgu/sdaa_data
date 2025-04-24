@@ -34,9 +34,9 @@ fn main() {
     let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(16384);
     let (tx_fft, rx_fft) = bounded::<LinearOwnedReusable<Vec<Complex<f32>>>>(1024);
     let (tx_wf, rx_wf) = bounded::<LinearOwnedReusable<Vec<f32>>>(4096);
-
+    let (_tx_recv_cmd, rx_recv_cmd)=bounded(1024);
     //let pool1 = Arc::clone(&pool);
-    std::thread::spawn(|| recv_pkt(socket, tx_payload));
+    std::thread::spawn(|| recv_pkt(socket, tx_payload, rx_recv_cmd));
     std::thread::spawn(move || pkt_fft(rx_payload, tx_fft, args.nch));
     std::thread::spawn(move || pkt_integrate(rx_fft, tx_wf, args.nint));
 
