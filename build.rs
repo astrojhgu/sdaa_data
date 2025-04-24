@@ -23,7 +23,7 @@ pub fn main() {
         .arg("--config")
         .arg("cbindgen.toml") // 可选：可省略
         .arg("--crate")
-        .arg("sdaa_ctrl") // ⚠️ 替换为你的 crate 名
+        .arg("sdaa_data") // ⚠️ 替换为你的 crate 名
         .arg("--output")
         .arg(header_path)
         .current_dir(&crate_dir)
