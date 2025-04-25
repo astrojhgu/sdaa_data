@@ -50,7 +50,7 @@ impl Sdr {
         Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
         Sender<DdcCmd>,
     ) {
-        let payload_socket = UdpSocket::bind(local_payload_addr).unwrap();
+        let payload_socket = UdpSocket::bind(local_payload_addr).expect("failed to bind payload socket");
 
         send_cmd(
             CtrlMsg::StreamStop { msg_id: 0 },
@@ -66,7 +66,7 @@ impl Sdr {
 
         tx_ddc_cmd
             .send(DdcCmd::LoCh(N_PT_PER_FRAME as isize / 4))
-            .unwrap();
+            .expect("failed to send loch");
         let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
         let ddc_thread = std::thread::spawn(move || {
             let fir_coeffs = fir_coeffs_half();

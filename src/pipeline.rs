@@ -40,10 +40,10 @@ pub fn recv_pkt(
         },
     ));
     //socket.set_nonblocking(true).unwrap();
-    socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    socket.set_read_timeout(Some(Duration::from_secs(1))).expect("failed to set timeout");
     loop {
         if !rx_cmd.is_empty() {
-            match rx_cmd.recv().unwrap() {
+            match rx_cmd.recv().expect("failed to recv cmd") {
                 RecvCmd::Destroy => break,
             }
         }
@@ -93,7 +93,7 @@ pub fn recv_pkt(
                 if tx_payload.is_full() {
                     eprint!("O");
                     if !rx_cmd.is_empty() {
-                        match rx_cmd.recv().unwrap() {
+                        match rx_cmd.recv().expect("failed to recv cmd") {
                             RecvCmd::Destroy => return,
                         }
                     }
@@ -114,7 +114,7 @@ pub fn recv_pkt(
             if tx_payload.is_full() {
                 eprint!("O");
                 if !rx_cmd.is_empty() {
-                    match rx_cmd.recv().unwrap() {
+                    match rx_cmd.recv().expect("failed to recv cmd") {
                         RecvCmd::Destroy => return,
                     }
                 }
@@ -242,7 +242,7 @@ pub fn pkt_ddc(
         |_v| {},
     ));
 
-    let mut lo_ch = if let DdcCmd::LoCh(c) = rx_ddc_cmd.recv().unwrap() {
+    let mut lo_ch = if let DdcCmd::LoCh(c) = rx_ddc_cmd.recv().expect("failed to recv cmd") {
         c
     } else {
         N_PT_PER_FRAME as isize / 4
@@ -279,7 +279,7 @@ pub fn pkt_ddc(
         }
     }
     drop(rx);
-    tx_recv_cmd.send(RecvCmd::Destroy).unwrap();
+    tx_recv_cmd.send(RecvCmd::Destroy).expect("failed to send cmd");
 }
 
 /*
