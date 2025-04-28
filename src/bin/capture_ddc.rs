@@ -61,16 +61,16 @@ fn main() {
     tx_cmd
         .send(sdaa_data::pipeline::DdcCmd::LoCh(args.lo_ch))
         .expect("failed to send cmd");
-    sdr.wakeup();
+    sdr.ctrl.wakeup();
     if !args.ignore_locking {
-        sdr.wait_until_locked(60);
+        sdr.ctrl.wait_until_locked(60);
     } else {
         eprintln!("ignoring clock locking");
     }
 
-    sdr.init();
-    sdr.sync();
-    sdr.stream_start();
+    sdr.ctrl.init();
+    sdr.ctrl.sync();
+    sdr.ctrl.stream_start();
     let mut nsamp: Option<usize> = args.nsamp.map(|x| x * 1_000_000);
     for _i in 0.. {
         let ddc = rx_ddc.recv().expect("failed to recv ddc payload");

@@ -31,7 +31,7 @@ pub fn recv_pkt(
     let mut ndropped = 0;
     let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
         move || {
-            eprint!("o");
+            //eprint!("o");
             Payload::default()
         },
         |v| {
@@ -137,7 +137,7 @@ pub fn pkt_fft(
     let nbuf = (nch * 2).max(N_PT_PER_FRAME);
     let pool: Arc<LinearObjectPool<Vec<Complex<f32>>>> = Arc::new(LinearObjectPool::new(
         move || {
-            eprint!(".");
+            //eprint!(".");
             vec![Complex::default(); nbuf / 2]
         },
         |_v| {},
@@ -184,7 +184,7 @@ pub fn pkt_integrate(
 ) {
     let pool: Arc<LinearObjectPool<Vec<f32>>> = Arc::new(LinearObjectPool::new(
         move || {
-            eprint!(".");
+            //eprint!(".");
             vec![]
         },
         |_v| {},
@@ -236,7 +236,7 @@ pub fn pkt_ddc(
     let n_out_data = ddc.n_out_data();
     let pool: Arc<LinearObjectPool<Vec<Complex<f32>>>> = Arc::new(LinearObjectPool::new(
         move || {
-            eprint!(".");
+            //eprint!(".");
             vec![Complex::<f32>::default(); n_out_data]
         },
         |_v| {},
