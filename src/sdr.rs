@@ -50,7 +50,8 @@ impl Sdr {
         Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
         Sender<DdcCmd>,
     ) {
-        let payload_socket = UdpSocket::bind(local_payload_addr).expect("failed to bind payload socket");
+        let payload_socket =
+            UdpSocket::bind(local_payload_addr).expect("failed to bind payload socket");
 
         send_cmd(
             CtrlMsg::StreamStop { msg_id: 0 },
@@ -70,7 +71,7 @@ impl Sdr {
         let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
         let ddc_thread = std::thread::spawn(move || {
             let fir_coeffs = fir_coeffs_half();
-            pkt_ddc(rx_payload, tx_ddc, 4, rx_ddc_cmd,tx_recv_cmd, &fir_coeffs);
+            pkt_ddc(rx_payload, tx_ddc, 4, rx_ddc_cmd, tx_recv_cmd, &fir_coeffs);
         });
 
         (
@@ -103,8 +104,31 @@ impl Sdr {
         self.send_cmd(cmd)
     }
 
+    pub fn awaken_and_locked(&self) -> Option<bool> {
+        let reply = self.query();
+        if reply.normal_reply.len() != 1 {
+            None
+        } else {
+            if let (_,CtrlMsg::QueryReply {
+                msg_id: _,
+                fm_ver: _,
+                tick_cnt1: _,
+                tick_cnt2: _,
+                trans_state,
+                locked,
+                health: _,
+            }) = reply.normal_reply[0]
+            {
+                println!("stat={:x} {:x}", trans_state, locked);
+                Some(trans_state & 0b10 != 0 && (locked == 0x3f || locked == 0x2f))
+            } else {
+                None
+            }
+        }
+    }
+
     pub fn wait_until_locked(&self, timeout_sec: usize) -> bool {
-        std::thread::sleep(Duration::from_secs(5));
+        std::thread::sleep(Duration::from_secs(6));
         for _i in 0..timeout_sec {
             let reply = self.query();
             if !reply.normal_reply.is_empty() {

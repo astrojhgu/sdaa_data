@@ -1,8 +1,6 @@
 #![allow(static_mut_refs)]
 
-use std::
-    net::{Ipv4Addr, SocketAddrV4}
-;
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 use crossbeam::channel::{Receiver, Sender};
 use lockfree_object_pool::LinearOwnedReusable;
@@ -13,7 +11,6 @@ use crate::{
     pipeline::DdcCmd,
     sdr::Sdr,
 };
-
 
 pub const NDEC: usize = 4;
 
@@ -46,8 +43,15 @@ pub extern "C" fn new_sdr_device(
 
     let (sdr_dev, rx_iq, tx_cmd) = Sdr::new(remote_ctrl_addr, local_ctrl_addr, local_payload_addr);
 
-    sdr_dev.wakeup();
-    sdr_dev.wait_until_locked(60);
+    if let Some(x)=sdr_dev.awaken_and_locked(){
+        if !x{
+            //panic!();
+            sdr_dev.wakeup();
+            sdr_dev.wait_until_locked(60);    
+        }
+    }else{
+        panic!("abnormal reply")
+    }
     sdr_dev.init();
     sdr_dev.sync();
 
@@ -60,7 +64,6 @@ pub extern "C" fn new_sdr_device(
     }))
 }
 
-
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
@@ -69,18 +72,17 @@ pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
     if !csdr.is_null() {
         let obj = unsafe { Box::from_raw(csdr) };
         let CSdr {
-            sdr_dev:_,
+            sdr_dev: _,
             rx_iq,
             tx_cmd,
-            buffer:_,
-            cursor:_,
+            buffer: _,
+            cursor: _,
         } = *obj;
         tx_cmd.send(DdcCmd::Destroy).unwrap();
         drop(tx_cmd);
         drop(rx_iq);
     }
 }
-
 
 /// # Safety
 ///
@@ -94,7 +96,6 @@ pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
     let obj = unsafe { &mut *csdr };
     obj.tx_cmd.send(DdcCmd::LoCh(lo_ch as isize)).unwrap();
 }
-
 
 /// # Safety
 ///
@@ -136,7 +137,6 @@ pub unsafe extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: us
 pub extern "C" fn get_mtu() -> usize {
     N_PT_PER_FRAME * M / NDEC
 }
-
 
 /// # Safety
 ///
