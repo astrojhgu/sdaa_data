@@ -10,7 +10,7 @@ use num::Complex;
 use sdaa_ctrl::ctrl_msg::{send_cmd, CmdReplySummary, CtrlMsg};
 
 use crate::{
-    ddc::{fir_coeffs_half, N_PT_PER_FRAME},
+    ddc::{fir_coeffs_half, fir_coeffs_full, N_PT_PER_FRAME},
     payload::Payload,
     pipeline::{pkt_ddc, recv_pkt, DdcCmd, RecvCmd},
 };
@@ -43,8 +43,7 @@ impl SdrCtrl {
         let reply = self.query();
         if reply.normal_reply.len() != 1 {
             None
-        } else {
-            if let (
+        } else if let (
                 _,
                 CtrlMsg::QueryReply {
                     msg_id: _,
@@ -62,7 +61,7 @@ impl SdrCtrl {
             } else {
                 None
             }
-        }
+        
     }
 
     pub fn wait_until_locked(&self, timeout_sec: usize) -> bool {
@@ -123,6 +122,30 @@ impl SdrCtrl {
     }
 }
 
+
+#[derive(Debug, Clone, Copy)]
+pub enum SdrSmpRate {
+    SmpRate240,
+    SmpRate120,
+}
+
+impl SdrSmpRate{
+    pub fn to_ndec(&self) -> usize {
+        match self {
+            SdrSmpRate::SmpRate240 => 2,
+            SdrSmpRate::SmpRate120 => 4,
+        }
+    }
+
+    pub fn from_ndec(ndec: usize) -> SdrSmpRate {
+        match ndec {
+            2 => SdrSmpRate::SmpRate240,
+            4 => SdrSmpRate::SmpRate120,
+            _ => panic!("invalid ndec"),
+        }
+    }
+}
+
 pub struct Sdr {
     rx_thread: Option<JoinHandle<()>>,
     ddc_thread: Option<JoinHandle<()>>,
@@ -152,6 +175,7 @@ impl Sdr {
         remote_ctrl_addr: SocketAddrV4,
         local_ctrl_addr: SocketAddrV4,
         local_payload_addr: SocketAddrV4,
+        smp_rate: SdrSmpRate,
     ) -> (
         Sdr,
         Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
@@ -177,8 +201,11 @@ impl Sdr {
             .expect("failed to send loch");
         let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
         let ddc_thread = std::thread::spawn(move || {
-            let fir_coeffs = fir_coeffs_half();
-            pkt_ddc(rx_payload, tx_ddc, 4, rx_ddc_cmd, tx_recv_cmd, &fir_coeffs);
+            let fir_coeffs = match smp_rate {
+                SdrSmpRate::SmpRate240 => fir_coeffs_full(),
+                SdrSmpRate::SmpRate120 => fir_coeffs_half(),
+            };
+            pkt_ddc(rx_payload, tx_ddc, smp_rate.to_ndec(), rx_ddc_cmd, tx_recv_cmd, &fir_coeffs);
         });
 
         (

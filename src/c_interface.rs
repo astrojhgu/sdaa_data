@@ -7,7 +7,7 @@ use lockfree_object_pool::LinearOwnedReusable;
 use num::Complex;
 
 use crate::{
-    ddc::{M, N_PT_PER_FRAME}, payload::Payload, pipeline::{DdcCmd, RecvCmd}, sdr::{Sdr, RawSdr}
+    ddc::{M, N_PT_PER_FRAME}, payload::Payload, pipeline::{DdcCmd, RecvCmd}, sdr::{Sdr, RawSdr, SdrSmpRate}
 };
 
 pub const NDEC: usize = 4;
@@ -33,13 +33,14 @@ pub extern "C" fn new_sdr_device(
     local_ctrl_port: u16,
     local_payload_ip: u32,
     local_payload_port: u16,
+    ndec: usize,
 ) -> *mut CSdr {
     let remote_ctrl_addr = SocketAddrV4::new(Ipv4Addr::from(remote_ctrl_ip), 3000);
     let local_ctrl_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), local_ctrl_port);
     let local_payload_addr =
         SocketAddrV4::new(Ipv4Addr::from(local_payload_ip), local_payload_port);
 
-    let (sdr_dev, rx_iq, tx_cmd) = Sdr::new(remote_ctrl_addr, local_ctrl_addr, local_payload_addr);
+    let (sdr_dev, rx_iq, tx_cmd) = Sdr::new(remote_ctrl_addr, local_ctrl_addr, local_payload_addr, SdrSmpRate::from_ndec(ndec));
 
     if let Some(x)=sdr_dev.ctrl.awaken_and_locked(){
         if !x{
@@ -229,7 +230,7 @@ pub unsafe extern "C" fn fetch_raw_data(csdr: *mut CRawSdr, buf: *mut i16, npt: 
     }
 
     let obj = unsafe { &mut *csdr };
-    let buf = unsafe { std::slice::from_raw_parts_mut(buf as *mut i16, npt) };
+    let buf = unsafe { std::slice::from_raw_parts_mut(buf, npt) };
     if obj.buffer.is_none() {
         obj.buffer = Some(obj.rx_payload.recv().unwrap());
         obj.cursor = 0;
@@ -252,6 +253,9 @@ pub unsafe extern "C" fn fetch_raw_data(csdr: *mut CRawSdr, buf: *mut i16, npt: 
     }
 }
 
+/// # Safety
+///
+/// This function should not be called before the horsemen are ready.
 #[no_mangle]
 pub unsafe extern "C" fn start_raw_data_stream(csdr: *mut CRawSdr) {
     let obj = unsafe { &mut *csdr };

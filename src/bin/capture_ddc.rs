@@ -3,7 +3,7 @@ use std::{fs::File, io::Write};
 use clap::Parser;
 use num::Complex;
 
-use sdaa_data::{sdr::Sdr, utils::slice_as_u8};
+use sdaa_data::{sdr::{Sdr, SdrSmpRate}, utils::slice_as_u8};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -52,6 +52,7 @@ fn main() {
         args.local_payload_addr
             .parse()
             .expect("failed to parse local payload addr"),
+        SdrSmpRate::from_ndec(4),
     );
 
     let mut dump_file = args
