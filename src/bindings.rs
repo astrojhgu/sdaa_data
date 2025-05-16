@@ -2,4 +2,10 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+pub mod ddc{
+    include!(concat!(env!("OUT_DIR"), "/ddc_bindings.rs"));
+}
+
+pub mod cufft{
+    include!(concat!(env!("OUT_DIR"), "/cufft_bindings.rs"));
+}

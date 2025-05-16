@@ -2,13 +2,13 @@
 use num::Complex;
 
 pub use crate::{
-    bindings::{self, fcomplex, DDCResources, DDCResources2},
+    bindings::ddc::{self, DDCResources, DDCResources2},
     payload::N_PT_PER_FRAME,
 };
 use std::os::raw::c_int;
 
-unsafe impl Send for fcomplex {}
-unsafe impl Sync for fcomplex {}
+unsafe impl Send for crate::bindings::ddc::fcomplex {}
+unsafe impl Sync for crate::bindings::ddc::fcomplex {}
 pub const M: usize = 8192;
 
 pub fn npt_ddc_per_dump(ndec: usize)->usize{
@@ -36,7 +36,7 @@ impl DownConverter {
             h_index: 0,
         };
         unsafe {
-            crate::bindings::init_ddc_resources(
+            crate::bindings::ddc::init_ddc_resources(
                 (&mut res) as *mut DDCResources,
                 N_PT_PER_FRAME as i32,
                 M as i32,
@@ -53,7 +53,7 @@ impl DownConverter {
         assert_eq!(indata.len(), N_PT_PER_FRAME);
 
         let result = unsafe {
-            bindings::ddc(
+            crate::bindings::ddc::ddc(
                 indata.as_ptr(),
                 lo_ch as c_int,
                 (&mut self.0) as *mut DDCResources,
@@ -66,21 +66,21 @@ impl DownConverter {
     pub fn fetch_output(&mut self, outdata: &mut [Complex<f32>]) {
         assert_eq!(outdata.len(), self.n_out_data());
         unsafe {
-            bindings::fetch_output(
-                outdata.as_mut_ptr() as *mut fcomplex,
+            crate::bindings::ddc::fetch_output(
+                outdata.as_mut_ptr() as *mut ddc::fcomplex,
                 (&mut self.0) as *mut DDCResources,
             )
         }
     }
 
     pub fn n_out_data(&self) -> usize {
-        unsafe { bindings::calc_output_size((&self.0) as *const DDCResources) as usize }
+        unsafe { crate::bindings::ddc::calc_output_size((&self.0) as *const DDCResources) as usize }
     }
 }
 
 impl Drop for DownConverter {
     fn drop(&mut self) {
-        unsafe { crate::bindings::free_ddc_resources((&mut self.0) as *mut DDCResources) };
+        unsafe { crate::bindings::ddc::free_ddc_resources((&mut self.0) as *mut DDCResources) };
     }
 }
 
