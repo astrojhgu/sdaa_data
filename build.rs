@@ -26,6 +26,7 @@ pub fn main() {
     {
         println!("cargo:rustc-link-search=../cuddc");
         println!("cargo:rustc-link-search=../cuwf");
+        println!("cargo:rustc-link-search=./lib");
         println!("cargo:rustc-link-lib=cuddc");
         println!("cargo:rustc-link-lib=cuwf");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
