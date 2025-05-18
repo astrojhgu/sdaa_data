@@ -31,7 +31,7 @@ pub fn main() {
         println!("cargo:rustc-link-lib=cuwf");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
         println!("cargo:rustc-link-lib=cudart");
-        //println!("cargo:rustc-link-lib=cuda");
+        println!("cargo:rustc-link-lib=cuda");
         //println!("cargo:rustc-link-lib=stdc++");
 
         let header_ddc = PathBuf::from("../cuddc/ddc.h");
