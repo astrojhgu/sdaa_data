@@ -30,3 +30,13 @@ opt-level = 3
 [features]
 default = ["cuda"]
 cuda = []
+
+[[bin]]
+name = "capture_waterfall"
+path = "src/bin/capture_waterfall.rs"
+required-features = ["cuda"]
+
+[[bin]]
+name = "capture_ddc"
+path = "src/bin/capture_ddc.rs"
+required-features = ["cuda"]

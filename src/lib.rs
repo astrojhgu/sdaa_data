@@ -17,6 +17,9 @@ pub mod c_interface;
 #[cfg(feature = "cuda")]
 pub mod sdr;
 
+#[cfg(feature = "cuda")]
+pub mod cuwf;
+
 pub type RawType = i16;
 pub type Ftype = f32;
 pub const RAW_SAMP_RATE: usize = 480_000_000;

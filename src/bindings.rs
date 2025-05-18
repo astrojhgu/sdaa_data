@@ -6,6 +6,6 @@ pub mod ddc{
     include!(concat!(env!("OUT_DIR"), "/ddc_bindings.rs"));
 }
 
-pub mod cufft{
-    include!(concat!(env!("OUT_DIR"), "/cufft_bindings.rs"));
+pub mod cuwf{
+    include!(concat!(env!("OUT_DIR"), "/cuwf_bindings.rs"));
 }

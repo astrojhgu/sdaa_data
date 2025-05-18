@@ -103,5 +103,3 @@ fn main() {
     drop(rx_ddc);
 }
 
-#[cfg(not(feature = "cuda"))]
-fn main() {}

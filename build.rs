@@ -25,16 +25,16 @@ pub fn main() {
     #[cfg(feature = "cuda")]
     {
         println!("cargo:rustc-link-search=../cuddc");
-        println!("cargo:rustc-link-search=../cufft_wrapper");
+        println!("cargo:rustc-link-search=../cuwf");
         println!("cargo:rustc-link-lib=cuddc");
-        println!("cargo:rustc-link-lib=cufft_wrapper");
+        println!("cargo:rustc-link-lib=cuwf");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
         println!("cargo:rustc-link-lib=cudart");
         //println!("cargo:rustc-link-lib=cuda");
         //println!("cargo:rustc-link-lib=stdc++");
 
         let header_ddc = PathBuf::from("../cuddc/ddc.h");
-        let header_cufft = PathBuf::from("../cufft_wrapper/cufft_wrapper.h");
+        let header_cuwf = PathBuf::from("../cuwf/cuwf.h");
         println!(
             "cargo:rerun-if-changed={}",
             header_ddc.to_str().expect("invalid path")
@@ -42,12 +42,12 @@ pub fn main() {
 
         println!(
             "cargo:rerun-if-changed={}",
-            header_cufft.to_str().expect("invalid path")
+            header_cuwf.to_str().expect("invalid path")
         );
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate
             // bindings for.
-            //.header(header_cufft.to_str().expect("invalid path"))
+            //.header(header_cuwf.to_str().expect("invalid path"))
             .header(header_ddc.to_str().expect("invalid path"))
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
@@ -67,8 +67,8 @@ pub fn main() {
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate
             // bindings for.
-            //.header(header_cufft.to_str().expect("invalid path"))
-            .header(header_cufft.to_str().expect("invalid path"))
+            //.header(header_cuwf.to_str().expect("invalid path"))
+            .header(header_cuwf.to_str().expect("invalid path"))
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
@@ -80,7 +80,7 @@ pub fn main() {
         // Write the bindings to the $OUT_DIR/bindings.rs file.
         let out_path = PathBuf::from(var("OUT_DIR").unwrap());
         bindings
-            .write_to_file(out_path.join("cufft_bindings.rs"))
+            .write_to_file(out_path.join("cuwf_bindings.rs"))
             .expect("Couldn't write bindings!");
     }
 }

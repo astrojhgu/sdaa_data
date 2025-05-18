@@ -40,7 +40,9 @@ pub fn recv_pkt(
         },
     ));
     //socket.set_nonblocking(true).unwrap();
-    socket.set_read_timeout(Some(Duration::from_secs(1))).expect("failed to set timeout");
+    socket
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("failed to set timeout");
     loop {
         if !rx_cmd.is_empty() {
             match rx_cmd.recv().expect("failed to recv cmd") {
@@ -91,7 +93,7 @@ pub fn recv_pkt(
                 //actually = is sufficient.
                 *c = payload.pkt_cnt + 1;
                 if tx_payload.is_full() {
-                    eprint!("O");
+                    //eprint!("O");
                     if !rx_cmd.is_empty() {
                         match rx_cmd.recv().expect("failed to recv cmd") {
                             RecvCmd::Destroy => return,
@@ -112,7 +114,7 @@ pub fn recv_pkt(
             payload1.copy_header(&payload);
             payload1.pkt_cnt = *c;
             if tx_payload.is_full() {
-                eprint!("O");
+                //eprint!("O");
                 if !rx_cmd.is_empty() {
                     match rx_cmd.recv().expect("failed to recv cmd") {
                         RecvCmd::Destroy => return,
@@ -177,42 +179,74 @@ pub fn pkt_fft(
     }
 }
 
+#[cfg(feature = "cuda")]
+pub fn pkt_wf(
+    rx: Receiver<LinearOwnedReusable<Payload>>,
+    tx: Sender<LinearOwnedReusable<Vec<f32>>>,
+    nch: usize,
+    nbatch: usize, 
+    nint: usize, 
+) {
+    assert_eq!(nbatch%nint, 0);
+    use crate::cuwf::WfResource;
+    let mut wf = WfResource::new(nch, nbatch, nint);
+    let nbuf=nch*nbatch/nint;
+
+    let pool: Arc<LinearObjectPool<Vec<f32>>> = Arc::new(LinearObjectPool::new(
+        move || {
+            //eprint!(".");
+            vec![0_f32; nbuf]
+        },
+        |_v| {},
+    ));
+    let mut result=pool.pull_owned();
+    while let Ok(payload) = rx.recv() {
+        if wf.process(&payload.data, result.as_mut_slice()) {
+            if tx.is_full() {
+                eprintln!("waterfall channel full, discarding");
+                continue;
+            }
+            if tx.send(result).is_err() {
+                break;
+            }
+            result = pool.pull_owned();
+        }
+    }
+}
+
 pub fn pkt_integrate(
     rx: Receiver<LinearOwnedReusable<Vec<Complex<f32>>>>,
     tx: Sender<LinearOwnedReusable<Vec<f32>>>,
+    nch: usize,
     nint: usize,
 ) {
     let pool: Arc<LinearObjectPool<Vec<f32>>> = Arc::new(LinearObjectPool::new(
         move || {
             //eprint!(".");
-            vec![]
+            vec![0.0; nch]
         },
-        |_v| {},
+        |v| {
+            v.fill(0.0);
+        },
     ));
 
-    loop {
-        let mut result = pool.pull_owned();
-        for i in 0..nint {
-            if let Ok(x) = rx.recv() {
-                if result.is_empty() {
-                    result.resize(x.len(), 0.0);
-                } else if i == 0 {
-                    result
-                        .iter_mut()
-                        .zip(x.iter())
-                        .for_each(|(a, &b)| *a = b.norm_sqr());
-                } else {
-                    result
-                        .iter_mut()
-                        .zip(x.iter())
-                        .for_each(|(a, &b)| *a += b.norm_sqr());
+    let mut result = pool.pull_owned();
+    let mut add_cnt = 0;
+    while let Ok(x) = rx.recv() {
+        let n = x.len();
+        assert!(n % nch == 0);
+        for x1 in x.chunks(nch) {
+            result.iter_mut().zip(x1).for_each(|(a, b)| {
+                *a += b.norm_sqr();
+            });
+            add_cnt += 1;
+            if add_cnt == nint {
+                add_cnt = 0;
+                if tx.send(result).is_err() {
+                    return;
                 }
-            } else {
-                return;
+                result = pool.pull_owned();
             }
-        }
-        if tx.send(result).is_err() {
-            break;
         }
     }
 }
@@ -279,7 +313,9 @@ pub fn pkt_ddc(
         }
     }
     drop(rx);
-    tx_recv_cmd.send(RecvCmd::Destroy).expect("failed to send cmd");
+    tx_recv_cmd
+        .send(RecvCmd::Destroy)
+        .expect("failed to send cmd");
 }
 
 /*
