@@ -41,3 +41,8 @@ required-features = ["cuda"]
 name = "capture_ddc"
 path = "src/bin/capture_ddc.rs"
 required-features = ["cuda"]
+
+[[bin]]
+name = "benchmark_ddc"
+path = "src/bin/benchmark_ddc.rs"
+required-features = ["cuda"]
