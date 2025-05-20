@@ -19,6 +19,54 @@ pub enum RecvCmd {
     Destroy,
 }
 
+pub fn fake_dev(tx_payload: Sender<LinearOwnedReusable<Payload>>, rx_cmd: Receiver<RecvCmd>) {
+    let mut last_print_time = Instant::now();
+    let t0= Instant::now();
+    let print_interval = Duration::from_secs(2);
+
+    let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
+        move || {
+            //eprint!("o");
+            Payload::default()
+        },
+        |v| {
+            v.pkt_cnt = 0;
+            v.data.fill(0);
+        },
+    ));
+    //socket.set_nonblocking(true).unwrap();
+    for pkt_cnt in 0.. {
+        if !rx_cmd.is_empty() {
+            match rx_cmd.recv().expect("failed to recv cmd") {
+                RecvCmd::Destroy => break,
+            }
+        }
+        let mut payload = pool.pull_owned();
+        payload.pkt_cnt = pkt_cnt;
+
+        let now = Instant::now();
+
+        if payload.pkt_cnt == 0 {
+            let local_time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            println!();
+            println!("==================================");
+            println!("start time:{}", local_time);
+            println!("==================================");
+        } else if now.duration_since(last_print_time) >= print_interval {
+            let dt=now.duration_since(t0).as_secs_f64();
+            let npkts=pkt_cnt as usize;
+            let nsamp=npkts*N_PT_PER_FRAME;
+            let smp_rate=nsamp as f64/dt;
+            println!("smp_rate: {} MSps q={}", smp_rate/1e6, tx_payload.len());
+            last_print_time = now;
+        }
+
+        if tx_payload.send(payload).is_err() {
+            return;
+        }
+    }
+}
+
 pub fn recv_pkt(
     socket: UdpSocket,
     tx_payload: Sender<LinearOwnedReusable<Payload>>,
@@ -184,13 +232,13 @@ pub fn pkt_wf(
     rx: Receiver<LinearOwnedReusable<Payload>>,
     tx: Sender<LinearOwnedReusable<Vec<f32>>>,
     nch: usize,
-    nbatch: usize, 
-    nint: usize, 
+    nbatch: usize,
+    nint: usize,
 ) {
-    assert_eq!(nbatch%nint, 0);
+    assert_eq!(nbatch % nint, 0);
     use crate::cuwf::WfResource;
     let mut wf = WfResource::new(nch, nbatch, nint);
-    let nbuf=nch*nbatch/nint;
+    let nbuf = nch * nbatch / nint;
 
     let pool: Arc<LinearObjectPool<Vec<f32>>> = Arc::new(LinearObjectPool::new(
         move || {
@@ -199,7 +247,7 @@ pub fn pkt_wf(
         },
         |_v| {},
     ));
-    let mut result=pool.pull_owned();
+    let mut result = pool.pull_owned();
     while let Ok(payload) = rx.recv() {
         if wf.process(&payload.data, result.as_mut_slice()) {
             if tx.is_full() {
