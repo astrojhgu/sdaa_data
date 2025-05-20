@@ -18,6 +18,7 @@ chrono = '0.4.40'
 num = '0.4.3'
 rand = "0.9.1"
 rand_distr = '0.5.1'
+libc='0.2.172'
 sdaa_ctrl = { path = '../sdaa_ctrl' }
 
 [build-dependencies]

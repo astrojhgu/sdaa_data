@@ -30,6 +30,9 @@ struct Args {
     #[clap(short = 'N', value_name = "Num of samples in 10^6")]
     nsamp: Option<usize>,
 
+    #[clap(short = 'r', value_name = "iq rate 240 or 480", default_value_t=240)]
+    iq_rate: usize,
+
     #[clap(short = 'C')]
     ignore_locking: bool,
 }
@@ -52,7 +55,7 @@ fn main() {
         args.local_payload_addr
             .parse()
             .expect("failed to parse local payload addr"),
-        SdrSmpRate::from_ndec(4),
+        SdrSmpRate::from_ndec(960/args.iq_rate),
     );
 
     let mut dump_file = args

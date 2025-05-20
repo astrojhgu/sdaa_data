@@ -3,7 +3,7 @@ use std::{fs::File, io::Write, net::UdpSocket};
 
 use clap::Parser;
 use crossbeam::channel::unbounded;
-use sdaa_data::{payload::Payload, pipeline::recv_pkt, utils::as_u8_slice};
+use sdaa_data::{payload::Payload, pipeline::recv_pkt, utils::{as_u8_slice, set_recv_buffer_size}};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -39,6 +39,7 @@ fn main() {
     let args = Args::parse();
 
     let socket = UdpSocket::bind(&args.local_addr).expect("failed to bind local addr");
+    set_recv_buffer_size(&socket, 10*1024*1024*1024).unwrap();
     //let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(65536);
     let (tx, rx) = unbounded::<LinearOwnedReusable<Payload>>();
     let (_tx_cmd, rx_cmd)=unbounded();
