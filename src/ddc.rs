@@ -2,10 +2,10 @@
 use num::Complex;
 
 pub use crate::{
-    bindings::ddc::{self, DDCResources, DDCResources2},
+    bindings::ddc::{self, DDCResources},
     payload::N_PT_PER_FRAME,
 };
-use std::os::raw::c_int;
+use std::{os::raw::c_int, sync::{Arc, Mutex}};
 
 unsafe impl Send for crate::bindings::ddc::fcomplex {}
 unsafe impl Sync for crate::bindings::ddc::fcomplex {}
@@ -15,38 +15,28 @@ pub fn npt_ddc_per_dump(ndec: usize)->usize{
     N_PT_PER_FRAME * M / ndec
 }
 
+#[derive(Clone)]
+pub struct DownConverter(pub Arc<Mutex<*mut DDCResources>>);
 
-pub struct DownConverter(pub DDCResources);
+unsafe impl Send for DownConverter {}
 
 impl DownConverter {
     pub fn new(ndec: usize, fir_coeffs: &[f32]) -> Self {
         let k = fir_coeffs.len() / ndec;
         assert_eq!(ndec * k, fir_coeffs.len());
 
-        let mut res = DDCResources {
-            d_indata: std::ptr::null_mut(),
-            K: k as i32,
-            N: N_PT_PER_FRAME as i32,
-            M: M as i32,
-            NDEC: ndec as i32,
-            d_fir_coeffs: std::ptr::null_mut(),
-            d_outdata: std::ptr::null_mut(),
-            mixed_data: std::ptr::null_mut(),
-            h_indata: std::ptr::null_mut(),
-            h_index: 0,
-        };
-        unsafe {
+
+        let res=unsafe {
             crate::bindings::ddc::init_ddc_resources(
-                (&mut res) as *mut DDCResources,
                 N_PT_PER_FRAME as i32,
                 M as i32,
                 ndec as c_int,
                 k as c_int,
                 fir_coeffs.as_ptr(),
-            );
-        }
+            )
+        };
 
-        Self(res)
+        Self(Arc::new(Mutex::new(res)))
     }
 
     pub fn ddc(&mut self, indata: &[i16], lo_ch: isize) -> bool {
@@ -56,7 +46,7 @@ impl DownConverter {
             crate::bindings::ddc::ddc(
                 indata.as_ptr(),
                 lo_ch as c_int,
-                (&mut self.0) as *mut DDCResources,
+                *self.0.lock().unwrap() as *mut DDCResources,
             )
         };
         assert!(result >= 0);
@@ -68,19 +58,19 @@ impl DownConverter {
         unsafe {
             crate::bindings::ddc::fetch_output(
                 outdata.as_mut_ptr() as *mut ddc::fcomplex,
-                (&mut self.0) as *mut DDCResources,
+                *self.0.lock().unwrap() as *mut DDCResources,
             )
         }
     }
 
     pub fn n_out_data(&self) -> usize {
-        unsafe { crate::bindings::ddc::calc_output_size((&self.0) as *const DDCResources) as usize }
+        unsafe { crate::bindings::ddc::calc_output_size(*self.0.lock().unwrap() as *const DDCResources) as usize }
     }
 }
 
 impl Drop for DownConverter {
     fn drop(&mut self) {
-        unsafe { crate::bindings::ddc::free_ddc_resources((&mut self.0) as *mut DDCResources) };
+        unsafe { crate::bindings::ddc::free_ddc_resources(*self.0.lock().unwrap() as *mut DDCResources) };
     }
 }
 
