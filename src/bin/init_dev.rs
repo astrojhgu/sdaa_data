@@ -29,8 +29,10 @@ fn main() {
     let sdr_ctrl=SdrCtrl{remote_ctrl_addr: args.remote_ctrl_addr.parse().unwrap(),
         local_ctrl_addr: args.local_ctrl_addr.parse().unwrap()};
 
-    sdr_ctrl.wait_until_locked(60);
+
     //std::thread::sleep(std::time::Duration::from_secs(2));
+    sdr_ctrl.stream_stop();
+    sdr_ctrl.wait_until_locked(60);
     let summary=sdr_ctrl.init();
     assert_eq!(summary.normal_reply.len(),1);
 }
