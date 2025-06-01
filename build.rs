@@ -1,6 +1,21 @@
-use std::{env::var, fs, path::PathBuf};
+use std::{env::var, fs, path::PathBuf, process::Command};
 
 pub fn main() {
+    let status = Command::new("make")
+        .current_dir("cuddc")
+        .status()
+        .expect("Failed to build CUDA library");
+
+    assert!(status.success());
+
+
+    let status = Command::new("make")
+        .current_dir("cuwf")
+        .status()
+        .expect("Failed to build CUDA library");
+
+    assert!(status.success());
+
     println!("cargo:rerun-if-changed=src/");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
@@ -24,18 +39,19 @@ pub fn main() {
 
     #[cfg(feature = "cuda")]
     {
-        println!("cargo:rustc-link-search=../cuddc");
-        println!("cargo:rustc-link-search=../cuwf");
-        println!("cargo:rustc-link-search=./lib");
-        println!("cargo:rustc-link-lib=cuddc");
-        println!("cargo:rustc-link-lib=cuwf");
+        println!("cargo:rustc-link-search=cuddc");
+        println!("cargo:rustc-link-search=cuwf");
+        println!("cargo:rustc-link-search=lib");
+        println!("cargo:rustc-link-lib=static=cuddc");
+        println!("cargo:rustc-link-lib=static=cuwf");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
         println!("cargo:rustc-link-lib=cudart");
         println!("cargo:rustc-link-lib=cuda");
+        println!("cargo:rustc-link-lib=cufft");
         //println!("cargo:rustc-link-lib=stdc++");
 
-        let header_ddc = PathBuf::from("../cuddc/ddc.h");
-        let header_cuwf = PathBuf::from("../cuwf/cuwf.h");
+        let header_ddc = PathBuf::from("cuddc/ddc.h");
+        let header_cuwf = PathBuf::from("cuwf/cuwf.h");
         println!(
             "cargo:rerun-if-changed={}",
             header_ddc.to_str().expect("invalid path")
@@ -63,7 +79,6 @@ pub fn main() {
         bindings
             .write_to_file(out_path.join("ddc_bindings.rs"))
             .expect("Couldn't write bindings!");
-
 
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate

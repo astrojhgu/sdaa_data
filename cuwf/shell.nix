@@ -4,7 +4,6 @@ pkgs.mkShell {
   name = "cuda-env-shell";
   buildInputs = with pkgs; [
     llvmPackages.libclang.lib
-    clang
     git
     gitRepo
     gnupg
@@ -50,7 +49,7 @@ pkgs.mkShell {
   ];
   shellHook = ''
     export CUDA_PATH=${pkgs.cudatoolkit}
-    export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib:$PWD/cuddc/:../cuwf
+    export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib:../cuddc
     export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib"
     export EXTRA_CCFLAGS="-I/usr/include"
     export SOAPY_SDR_PLUGIN_PATH=$PWD

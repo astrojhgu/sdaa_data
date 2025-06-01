@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "*.toml": "toml",
+        "array": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "span": "cpp",
+        "random": "cpp"
+    },
+    "nixEnvSelector.nixFile": "${workspaceFolder}/shell.nix"
+}
