@@ -2,7 +2,7 @@ all: test_cuwf libcuwf.a #libcuwf.so
 
 OPT=-O3
 CFLAGS = -g $(OPT)
-LIBS=-L ./lib -lcudart -lcuda -lcufft
+LIBS=-L ./lib -lcudart_static -lcuda -lcufft_static
 
 test_cuwf.o: test_cuwf.cpp cuwf.h
 	g++ -c $< -o $@ $(CFLAGS)

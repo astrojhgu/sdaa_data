@@ -45,10 +45,11 @@ pub fn main() {
         println!("cargo:rustc-link-lib=static=cuddc");
         println!("cargo:rustc-link-lib=static=cuwf");
         //println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
-        println!("cargo:rustc-link-lib=cudart");
+        println!("cargo:rustc-link-lib=cudart_static");
         println!("cargo:rustc-link-lib=cuda");
-        println!("cargo:rustc-link-lib=cufft");
-        //println!("cargo:rustc-link-lib=stdc++");
+        println!("cargo:rustc-link-lib=cufft_static_nocallback");
+        println!("cargo:rustc-link-lib=culibos");
+        println!("cargo:rustc-link-lib=stdc++");
 
         let header_ddc = PathBuf::from("cuddc/ddc.h");
         let header_cuwf = PathBuf::from("cuwf/cuwf.h");
