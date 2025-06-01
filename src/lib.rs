@@ -14,7 +14,6 @@ pub mod ddc;
 #[cfg(feature = "cuda")]
 pub mod c_interface;
 
-#[cfg(feature = "cuda")]
 pub mod sdr;
 
 #[cfg(feature = "cuda")]

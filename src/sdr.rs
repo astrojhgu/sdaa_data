@@ -9,11 +9,19 @@ use lockfree_object_pool::LinearOwnedReusable;
 use num::Complex;
 use sdaa_ctrl::ctrl_msg::{send_cmd, CmdReplySummary, CtrlMsg};
 
+#[cfg(not(feature="cuda"))]
+use crate::{
+    payload::Payload,
+    pipeline::{recv_pkt, DdcCmd, RecvCmd},
+};
+
+#[cfg(feature="cuda")]
 use crate::{
     ddc::{fir_coeffs_half, fir_coeffs_full, N_PT_PER_FRAME},
     payload::Payload,
     pipeline::{pkt_ddc, recv_pkt, DdcCmd, RecvCmd},
 };
+
 
 pub struct SdrCtrl {
     pub remote_ctrl_addr: SocketAddrV4,
@@ -123,12 +131,16 @@ impl SdrCtrl {
 }
 
 
+
+#[cfg(feature="cuda")]
 #[derive(Debug, Clone, Copy)]
 pub enum SdrSmpRate {
     SmpRate240,
     SmpRate120,
 }
 
+
+#[cfg(feature="cuda")]
 impl SdrSmpRate{
     pub fn to_ndec(&self) -> usize {
         match self {
@@ -146,12 +158,14 @@ impl SdrSmpRate{
     }
 }
 
+#[cfg(feature="cuda")]
 pub struct Sdr {
     rx_thread: Option<JoinHandle<()>>,
     ddc_thread: Option<JoinHandle<()>>,
     pub ctrl: SdrCtrl,
 }
 
+#[cfg(feature="cuda")]
 impl Drop for Sdr {
     fn drop(&mut self) {
         eprintln!("dropped");
@@ -169,6 +183,7 @@ impl Drop for Sdr {
     }
 }
 
+#[cfg(feature="cuda")]
 impl Sdr {
     #[allow(clippy::type_complexity)]
     pub fn new(
