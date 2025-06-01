@@ -3,6 +3,7 @@ use std::{env::var, fs, path::PathBuf, process::Command};
 pub fn main() {
     let status = Command::new("make")
         .current_dir("cuddc")
+        .env("OUT_DIR", var("OUT_DIR").unwrap())
         .status()
         .expect("Failed to build CUDA library");
 
@@ -11,6 +12,7 @@ pub fn main() {
 
     let status = Command::new("make")
         .current_dir("cuwf")
+        .env("OUT_DIR", var("OUT_DIR").unwrap())
         .status()
         .expect("Failed to build CUDA library");
 
@@ -39,8 +41,8 @@ pub fn main() {
 
     #[cfg(feature = "cuda")]
     {
-        println!("cargo:rustc-link-search=cuddc");
-        println!("cargo:rustc-link-search=cuwf");
+        println!("cargo:rustc-link-search={}", var("OUT_DIR").unwrap());
+        //println!("cargo:rustc-link-search=cuwf");
         println!("cargo:rustc-link-search=lib");
         println!("cargo:rustc-link-lib=static=cuddc");
         println!("cargo:rustc-link-lib=static=cuwf");

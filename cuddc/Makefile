@@ -1,24 +1,24 @@
-all: test_ddc libcuddc.a #libcuddc.so
+all: ${OUT_DIR}/libcuddc.a ${OUT_DIR}/test_ddc #libcuddc.so
 
 OPT=-O3
 CFLAGS = -g $(OPT)
 LIBS=-L ./lib -lcudart_static -lcuda
 
-test_ddc.o: test_ddc.cpp
+${OUT_DIR}/test_ddc.o: test_ddc.cpp
 	g++ -c $< -o $@ $(CFLAGS)
 
-ddc_kernel.o: ddc_kernel.cu
+${OUT_DIR}/ddc_kernel.o: ddc_kernel.cu
 	nvcc --compiler-options -fPIC -c $< -o $@ $(CFLAGS) --cudart=static --cudadevrt=none
 
-test_ddc: test_ddc.o ddc_kernel.o
-	nvcc $^ -o $@ $(CFLAGS) --cudart=static --cudadevrt=none
+${OUT_DIR}/test_ddc: ${OUT_DIR}/test_ddc.o ${OUT_DIR}/ddc_kernel.o
+	nvcc $^ -o $@ $(CFLAGS) --cudart=static --cudadevrt=none $(LIBS)
 
-libcuddc.so: ddc_kernel.o
+${OUT_DIR}/libcuddc.so: ${OUT_DIR}/ddc_kernel.o
 	g++ --shared -fPIC -o $@ $^ $(LIBS)
 
-libcuddc.a: ddc_kernel.o
+${OUT_DIR}/libcuddc.a: ${OUT_DIR}/ddc_kernel.o
 	ar crv $@ $^
 	ranlib $@
 
 clean:
-	rm -f *.o
+	rm -f ${OUT_DIR}/*.o
