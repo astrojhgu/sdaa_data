@@ -4,14 +4,14 @@ use std::{net::UdpSocket, sync::Arc};
 use chrono::Local;
 use crossbeam::channel::{Receiver, Sender};
 use lockfree_object_pool::{LinearObjectPool, LinearOwnedReusable};
-use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
+use rustfft::num_complex::Complex;
 
 #[cfg(feature = "cuda")]
 use crate::ddc::DownConverter;
 
 use crate::{
-    payload::{Payload, N_PT_PER_FRAME},
+    payload::{N_PT_PER_FRAME, Payload},
     utils::as_mut_u8_slice,
 };
 
@@ -21,7 +21,7 @@ pub enum RecvCmd {
 
 pub fn fake_dev(tx_payload: Sender<LinearOwnedReusable<Payload>>, rx_cmd: Receiver<RecvCmd>) {
     let mut last_print_time = Instant::now();
-    let t0= Instant::now();
+    let t0 = Instant::now();
     let print_interval = Duration::from_secs(2);
 
     let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
@@ -50,14 +50,14 @@ pub fn fake_dev(tx_payload: Sender<LinearOwnedReusable<Payload>>, rx_cmd: Receiv
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
             println!();
             println!("==================================");
-            println!("start time:{}", local_time);
+            println!("start time:{local_time}");
             println!("==================================");
         } else if now.duration_since(last_print_time) >= print_interval {
-            let dt=now.duration_since(t0).as_secs_f64();
-            let npkts=pkt_cnt as usize;
-            let nsamp=npkts*N_PT_PER_FRAME;
-            let smp_rate=nsamp as f64/dt;
-            println!("smp_rate: {} MSps q={}", smp_rate/1e6, tx_payload.len());
+            let dt = now.duration_since(t0).as_secs_f64();
+            let npkts = pkt_cnt as usize;
+            let nsamp = npkts * N_PT_PER_FRAME;
+            let smp_rate = nsamp as f64 / dt;
+            println!("smp_rate: {} MSps q={}", smp_rate / 1e6, tx_payload.len());
             last_print_time = now;
         }
 
@@ -131,7 +131,7 @@ pub fn recv_pkt(
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
             println!();
             println!("==================================");
-            println!("start time:{}", local_time);
+            println!("start time:{local_time}");
             println!("==================================");
         }
 
@@ -345,18 +345,18 @@ pub fn pkt_ddc(
                 break;
             }
         }
-        if let Ok(payload) = rx.recv_timeout(Duration::from_secs(1)) {
-            if ddc.ddc(&payload.data, lo_ch) {
-                let mut outdata = pool.pull_owned();
-                ddc.fetch_output(&mut outdata);
+        if let Ok(payload) = rx.recv_timeout(Duration::from_secs(1))
+            && ddc.ddc(&payload.data, lo_ch)
+        {
+            let mut outdata = pool.pull_owned();
+            ddc.fetch_output(&mut outdata);
 
-                if tx.is_full() {
-                    eprintln!("ddc channel full, discarding");
-                    continue;
-                }
-                if tx.send_timeout(outdata, Duration::from_secs(1)).is_err() {
-                    break;
-                }
+            if tx.is_full() {
+                eprintln!("ddc channel full, discarding");
+                continue;
+            }
+            if tx.send_timeout(outdata, Duration::from_secs(1)).is_err() {
+                break;
             }
         }
     }

@@ -1,7 +1,7 @@
 [package]
 name = "sdaa_data"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "sdaa_data"
@@ -23,7 +23,7 @@ sdaa_ctrl = { path = '../sdaa_ctrl' }
 
 [build-dependencies]
 bindgen = "0.71.1"
-cbindgen = "0.28.0"
+cbindgen = "0.29.0"
 
 [profile.release]
 opt-level = 3

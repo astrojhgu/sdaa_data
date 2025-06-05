@@ -48,12 +48,13 @@ fn main() {
         while let Some(ref mut c) = next_cnt {
             //let current_cnt = c + 1;
 
-            if *c as usize % args.dump_per_npkt == 0 && args.npkt_per_dump > 0 {
-                if let Some(ref outname) = args.outname {
-                    dump_file = Some(File::create(outname).unwrap());
-                    npkt_to_dump = args.npkt_per_dump;
-                    println!("dump file created");
-                }
+            if *c as usize % args.dump_per_npkt == 0
+                && args.npkt_per_dump > 0
+                && let Some(ref outname) = args.outname
+            {
+                dump_file = Some(File::create(outname).unwrap());
+                npkt_to_dump = args.npkt_per_dump;
+                println!("dump file created");
             }
 
             if let Some(ref mut f) = dump_file {

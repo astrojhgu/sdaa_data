@@ -21,6 +21,7 @@ pub struct DownConverter(pub Arc<Mutex<*mut DDCResources>>);
 unsafe impl Send for DownConverter {}
 
 impl DownConverter {
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(ndec: usize, fir_coeffs: &[f32]) -> Self {
         let k = fir_coeffs.len() / ndec;
         assert_eq!(ndec * k, fir_coeffs.len());
@@ -35,7 +36,6 @@ impl DownConverter {
                 fir_coeffs.as_ptr(),
             )
         };
-
         Self(Arc::new(Mutex::new(res)))
     }
 
@@ -46,7 +46,7 @@ impl DownConverter {
             crate::bindings::ddc::ddc(
                 indata.as_ptr(),
                 lo_ch as c_int,
-                *self.0.lock().unwrap() as *mut DDCResources,
+                *self.0.lock().unwrap(),
             )
         };
         assert!(result >= 0);
@@ -58,7 +58,7 @@ impl DownConverter {
         unsafe {
             crate::bindings::ddc::fetch_output(
                 outdata.as_mut_ptr() as *mut ddc::fcomplex,
-                *self.0.lock().unwrap() as *mut DDCResources,
+                *self.0.lock().unwrap(),
             )
         }
     }
@@ -70,7 +70,7 @@ impl DownConverter {
 
 impl Drop for DownConverter {
     fn drop(&mut self) {
-        unsafe { crate::bindings::ddc::free_ddc_resources(*self.0.lock().unwrap() as *mut DDCResources) };
+        unsafe { crate::bindings::ddc::free_ddc_resources(*self.0.lock().unwrap()) };
     }
 }
 

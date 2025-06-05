@@ -71,7 +71,7 @@ fn main() {
         let x = rx_wf.recv().unwrap();
         time_elapsed += dt_per_iter;
         if time_elapsed as usize != old_time_elapsed_integer {
-            println!("{}", time_elapsed);
+            println!("{time_elapsed}");
             old_time_elapsed_integer = time_elapsed as usize;
         }
 

@@ -4,24 +4,23 @@ use std::{
     time::Duration,
 };
 
-use crossbeam::channel::{bounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender, bounded};
 use lockfree_object_pool::LinearOwnedReusable;
 use num::Complex;
-use sdaa_ctrl::ctrl_msg::{send_cmd, CmdReplySummary, CtrlMsg};
+use sdaa_ctrl::ctrl_msg::{CmdReplySummary, CtrlMsg, send_cmd};
 
-#[cfg(not(feature="cuda"))]
+#[cfg(not(feature = "cuda"))]
 use crate::{
     payload::Payload,
-    pipeline::{recv_pkt, DdcCmd, RecvCmd},
+    pipeline::{DdcCmd, RecvCmd, recv_pkt},
 };
 
-#[cfg(feature="cuda")]
+#[cfg(feature = "cuda")]
 use crate::{
-    ddc::{fir_coeffs_half, fir_coeffs_full, N_PT_PER_FRAME},
+    ddc::{N_PT_PER_FRAME, fir_coeffs_full, fir_coeffs_half},
     payload::Payload,
-    pipeline::{pkt_ddc, recv_pkt, DdcCmd, RecvCmd},
+    pipeline::{DdcCmd, RecvCmd, pkt_ddc, recv_pkt},
 };
-
 
 pub struct SdrCtrl {
     pub remote_ctrl_addr: SocketAddrV4,
@@ -52,32 +51,31 @@ impl SdrCtrl {
         if reply.normal_reply.len() != 1 {
             None
         } else if let (
-                _,
-                CtrlMsg::QueryReply {
-                    msg_id: _,
-                    fm_ver: _,
-                    tick_cnt1: _,
-                    tick_cnt2: _,
-                    trans_state,
-                    locked,
-                    health: _,
-                },
-            ) = reply.normal_reply[0]
-            {
-                println!("stat={:x} {:x}", trans_state, locked);
-                Some(trans_state & 0b10 != 0 && (locked == 0x3f || locked == 0x2f))
-            } else {
-                None
-            }
-        
+            _,
+            CtrlMsg::QueryReply {
+                msg_id: _,
+                fm_ver: _,
+                tick_cnt1: _,
+                tick_cnt2: _,
+                trans_state,
+                locked,
+                health: _,
+            },
+        ) = reply.normal_reply[0]
+        {
+            println!("stat={trans_state:x} {locked:x}");
+            Some(trans_state & 0b10 != 0 && (locked == 0x3f || locked == 0x2f))
+        } else {
+            None
+        }
     }
 
     pub fn wait_until_locked(&self, timeout_sec: usize) -> bool {
         std::thread::sleep(Duration::from_secs(6));
         for _i in 0..timeout_sec {
             let reply = self.query();
-            if !reply.normal_reply.is_empty() {
-                if let (
+            if !reply.normal_reply.is_empty()
+                && let (
                     _a,
                     CtrlMsg::QueryReply {
                         msg_id: _,
@@ -89,12 +87,11 @@ impl SdrCtrl {
                         health: _,
                     },
                 ) = reply.normal_reply[0]
-                {
-                    if *locked == 0x3f || *locked == 0x2f {
-                        return true;
-                    }
-                }
+                && (*locked == 0x3f || *locked == 0x2f)
+            {
+                return true;
             }
+
             std::thread::sleep(Duration::from_secs(1));
         }
         false
@@ -130,18 +127,15 @@ impl SdrCtrl {
     }
 }
 
-
-
-#[cfg(feature="cuda")]
+#[cfg(feature = "cuda")]
 #[derive(Debug, Clone, Copy)]
 pub enum SdrSmpRate {
     SmpRate240,
     SmpRate120,
 }
 
-
-#[cfg(feature="cuda")]
-impl SdrSmpRate{
+#[cfg(feature = "cuda")]
+impl SdrSmpRate {
     pub fn to_ndec(&self) -> usize {
         match self {
             SdrSmpRate::SmpRate240 => 2,
@@ -158,32 +152,33 @@ impl SdrSmpRate{
     }
 }
 
-#[cfg(feature="cuda")]
+#[cfg(feature = "cuda")]
 pub struct Sdr {
     rx_thread: Option<JoinHandle<()>>,
     ddc_thread: Option<JoinHandle<()>>,
     pub ctrl: SdrCtrl,
 }
 
-#[cfg(feature="cuda")]
+#[cfg(feature = "cuda")]
 impl Drop for Sdr {
     fn drop(&mut self) {
         eprintln!("dropped");
         self.ctrl.stream_stop();
         let h = self.ddc_thread.take();
         eprintln!("drop1");
-        if let Some(h1) = h {
-            if let Ok(()) = h1.join() {}
-        }
+        if let Some(h1) = h
+            && let Ok(()) = h1.join()
+        {}
+
         eprintln!("drop2");
         let h = self.rx_thread.take();
-        if let Some(h1) = h {
-            if let Ok(()) = h1.join() {}
-        }
+        if let Some(h1) = h
+            && let Ok(()) = h1.join()
+        {}
     }
 }
 
-#[cfg(feature="cuda")]
+#[cfg(feature = "cuda")]
 impl Sdr {
     #[allow(clippy::type_complexity)]
     pub fn new(
@@ -220,7 +215,14 @@ impl Sdr {
                 SdrSmpRate::SmpRate240 => fir_coeffs_full(),
                 SdrSmpRate::SmpRate120 => fir_coeffs_half(),
             };
-            pkt_ddc(rx_payload, tx_ddc, smp_rate.to_ndec(), rx_ddc_cmd, tx_recv_cmd, &fir_coeffs);
+            pkt_ddc(
+                rx_payload,
+                tx_ddc,
+                smp_rate.to_ndec(),
+                rx_ddc_cmd,
+                tx_recv_cmd,
+                &fir_coeffs,
+            );
         });
 
         (
@@ -238,7 +240,6 @@ impl Sdr {
     }
 }
 
-
 pub struct RawSdr {
     rx_thread: Option<JoinHandle<()>>,
     pub ctrl: SdrCtrl,
@@ -249,9 +250,9 @@ impl Drop for RawSdr {
         eprintln!("dropped");
         self.ctrl.stream_stop();
         let h = self.rx_thread.take();
-        if let Some(h1) = h {
-            if let Ok(()) = h1.join() {}
-        }
+        if let Some(h1) = h
+            && let Ok(()) = h1.join()
+        {}
     }
 }
 

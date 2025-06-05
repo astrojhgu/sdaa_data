@@ -1,9 +1,6 @@
-use std::{fs::File, io::Write};
-
 use clap::Parser;
-use num::Complex;
 
-use sdaa_data::{sdr::{SdrCtrl}, utils::slice_as_u8};
+use sdaa_data::sdr::SdrCtrl;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -23,14 +20,14 @@ fn main() {
     //let (tx,rx)=bounded(256);
     let args = Args::parse();
 
-    let sdr_ctrl=SdrCtrl{remote_ctrl_addr: args.remote_ctrl_addr.parse().unwrap(),
-        local_ctrl_addr: args.local_ctrl_addr.parse().unwrap()};
-
+    let sdr_ctrl = SdrCtrl {
+        remote_ctrl_addr: args.remote_ctrl_addr.parse().unwrap(),
+        local_ctrl_addr: args.local_ctrl_addr.parse().unwrap(),
+    };
 
     //std::thread::sleep(std::time::Duration::from_secs(2));
     sdr_ctrl.stream_stop();
     sdr_ctrl.wait_until_locked(60);
-    let summary=sdr_ctrl.init();
-    assert_eq!(summary.normal_reply.len(),1);
+    let summary = sdr_ctrl.init();
+    assert_eq!(summary.normal_reply.len(), 1);
 }
-

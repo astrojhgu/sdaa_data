@@ -3,7 +3,11 @@ use std::{fs::File, io::Write, net::UdpSocket};
 
 use clap::Parser;
 use crossbeam::channel::unbounded;
-use sdaa_data::{payload::Payload, pipeline::recv_pkt, utils::{as_u8_slice, set_recv_buffer_size}};
+use sdaa_data::{
+    payload::Payload,
+    pipeline::recv_pkt,
+    utils::{as_u8_slice, set_recv_buffer_size},
+};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -39,10 +43,10 @@ fn main() {
     let args = Args::parse();
 
     let socket = UdpSocket::bind(&args.local_addr).expect("failed to bind local addr");
-    set_recv_buffer_size(&socket, 10*1024*1024*1024).unwrap();
+    set_recv_buffer_size(&socket, 10 * 1024 * 1024 * 1024).unwrap();
     //let (tx, rx) = bounded::<LinearOwnedReusable<Payload>>(65536);
     let (tx, rx) = unbounded::<LinearOwnedReusable<Payload>>();
-    let (_tx_cmd, rx_cmd)=unbounded();
+    let (_tx_cmd, rx_cmd) = unbounded();
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx, rx_cmd));
 
@@ -51,10 +55,9 @@ fn main() {
 
     let mut old_cnt = None;
     let mut full_dump_cnt = 0;
-    let mut full_dump_file = args
-        .full_dump_name
-        .as_ref()
-        .map(|n| File::create(format!("{}{}.dat", &n, full_dump_cnt)).expect("failed to create file"));
+    let mut full_dump_file = args.full_dump_name.as_ref().map(|n| {
+        File::create(format!("{}{}.dat", &n, full_dump_cnt)).expect("failed to create file")
+    });
     let mut npkts_full_dump = 0;
     let mut total_npkts_received = 0;
 
@@ -65,19 +68,22 @@ fn main() {
             println!("cnt: {} queue cnt: {}", payload.pkt_cnt, rx.len());
         }
 
-        if let Some(c) = old_cnt {
-            if payload.pkt_cnt != 0 && c + 1 != payload.pkt_cnt {
-                eprintln!("dropped {}", payload.pkt_cnt - c - 1);
-            }
+        if let Some(c) = old_cnt
+            && payload.pkt_cnt != 0
+            && c + 1 != payload.pkt_cnt
+        {
+            eprintln!("dropped {}", payload.pkt_cnt - c - 1);
         }
+
         old_cnt = Some(payload.pkt_cnt);
 
-        if payload.pkt_cnt as usize % args.dump_per_npkt == 0 && args.npkt_per_dump > 0 {
-            if let Some(ref outname) = args.outname {
-                dump_file = Some(File::create(outname).expect("failed to create dump file"));
-                npkt_to_dump = args.npkt_per_dump;
-                println!("dump file created");
-            }
+        if payload.pkt_cnt as usize % args.dump_per_npkt == 0
+            && args.npkt_per_dump > 0
+            && let Some(ref outname) = args.outname
+        {
+            dump_file = Some(File::create(outname).expect("failed to create dump file"));
+            npkt_to_dump = args.npkt_per_dump;
+            println!("dump file created");
         }
 
         if let Some(ref mut f) = dump_file {
@@ -97,29 +103,27 @@ fn main() {
 
             if npkts_full_dump == args.npkt_per_full_dump {
                 full_dump_cnt += 1;
-                full_dump_file = args
-                    .full_dump_name
-                    .as_ref()
-                    .map(|n| File::create(format!("{}{}.dat", n, full_dump_cnt)).expect("failed to create"));
+                full_dump_file = args.full_dump_name.as_ref().map(|n| {
+                    File::create(format!("{n}{full_dump_cnt}.dat")).expect("failed to create")
+                });
                 npkts_full_dump = 0;
             }
         }
 
         total_npkts_received += 1;
-        if let Some(n) = args.npkts_to_recv {
-            if total_npkts_received == n {
-                break;
-            }
+        if let Some(n) = args.npkts_to_recv
+            && total_npkts_received == n
+        {
+            break;
         }
 
         if payload.pkt_cnt == 0 {
             full_dump_cnt = 0;
             npkts_full_dump = 0;
             total_npkts_received = 0;
-            full_dump_file = args
-                .full_dump_name
-                .as_ref()
-                .map(|n| File::create(format!("{}{}.dat", n, full_dump_cnt)).expect("failed to create file"));
+            full_dump_file = args.full_dump_name.as_ref().map(|n| {
+                File::create(format!("{n}{full_dump_cnt}.dat")).expect("failed to create file")
+            });
         }
     }
 }

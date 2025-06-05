@@ -27,7 +27,7 @@ pub struct CComplex {
     pub im: f32,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn new_sdr_device(
     remote_ctrl_ip: u32,
     local_ctrl_port: u16,
@@ -66,7 +66,7 @@ pub extern "C" fn new_sdr_device(
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
     if !csdr.is_null() {
         let obj = unsafe { Box::from_raw(csdr) };
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn free_sdr_device(csdr: *mut CSdr) {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
     if csdr.is_null() {
         return;
@@ -99,7 +99,7 @@ pub unsafe extern "C" fn set_lo_ch(csdr: *mut CSdr, lo_ch: i32) {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: usize) {
     if csdr.is_null() {
         return;
@@ -132,7 +132,7 @@ pub unsafe extern "C" fn fetch_data(csdr: *mut CSdr, buf: *mut CComplex, npt: us
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn get_mtu() -> usize {
     N_PT_PER_FRAME * M / NDEC
 }
@@ -140,7 +140,7 @@ pub extern "C" fn get_mtu() -> usize {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn start_data_stream(csdr: *mut CSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.ctrl.stream_start();
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn start_data_stream(csdr: *mut CSdr) {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn stop_data_stream(csdr: *mut CSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.ctrl.stream_stop();
@@ -164,7 +164,7 @@ pub struct CRawSdr {
 }
 
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn new_raw_sdr_device(
     remote_ctrl_ip: u32,
     local_ctrl_port: u16,
@@ -203,7 +203,7 @@ pub extern "C" fn new_raw_sdr_device(
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_raw_sdr_device(csdr: *mut CRawSdr) {
     if !csdr.is_null() {
         let obj = unsafe { Box::from_raw(csdr) };
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn free_raw_sdr_device(csdr: *mut CRawSdr) {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fetch_raw_data(csdr: *mut CRawSdr, buf: *mut i16, npt: usize) {
     if csdr.is_null() {
         return;
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn fetch_raw_data(csdr: *mut CRawSdr, buf: *mut i16, npt: 
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn start_raw_data_stream(csdr: *mut CRawSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.ctrl.stream_start();
@@ -265,7 +265,7 @@ pub unsafe extern "C" fn start_raw_data_stream(csdr: *mut CRawSdr) {
 /// # Safety
 ///
 /// This function should not be called before the horsemen are ready.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn stop_raw_data_stream(csdr: *mut CRawSdr) {
     let obj = unsafe { &mut *csdr };
     obj.sdr_dev.ctrl.stream_stop();
