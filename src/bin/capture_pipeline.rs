@@ -93,6 +93,9 @@ fn main() {
             if npkt_to_dump == 0 {
                 dump_file = None;
                 println!("dump file saved");
+
+                println!("pkt_cnt: {}, base_id: {}, port_id: {}, npkts_per_payload: {}",
+                         payload.pkt_cnt, payload.base_id, payload.port_id, payload.npt_per_frame);
             }
         }
 
