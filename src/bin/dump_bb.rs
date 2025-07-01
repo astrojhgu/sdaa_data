@@ -90,7 +90,7 @@ fn main() {
 
         if let Some(npkts_per_file) = args.npkts_per_file
             && let Some(ref fname) = args.outname
-            && current_file_pkts >= npkts_per_file
+            && current_file_pkts >= npkts_per_file && npkts_per_file>0
         {
             current_file_no += 1;
             current_file_pkts = 0;
