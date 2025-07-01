@@ -1,5 +1,5 @@
 use lockfree_object_pool::LinearOwnedReusable;
-use std::{fs::File, io::Write, net::UdpSocket};
+use std::{fs::File, io::{BufWriter, Write}, net::UdpSocket};
 
 use clap::Parser;
 use crossbeam::channel::unbounded;
@@ -20,6 +20,9 @@ struct Args {
 
     #[clap(short = 'p', value_name = "npkts to dump")]
     npkts_to_recv: Option<usize>,
+
+    #[clap(short = 's', value_name = "npkts per file")]
+    npkts_per_file: Option<usize>,
 }
 
 fn main() {
@@ -34,11 +37,23 @@ fn main() {
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(|| recv_pkt(socket, tx, rx_cmd));
 
-    let mut dump_file = args
-        .outname
-        .as_ref()
-        .map(|n| File::create(n).expect("failed to create dump file"));
     let mut npkts_received = 0;
+    let mut current_file_no = 0;
+    let mut current_file_pkts = 0;
+
+    let mut dump_file = if let Some(ref fname) = args.outname {
+        Some(BufWriter::with_capacity(
+            1024 * 1024 * 1024,
+            if args.npkts_per_file.is_some() {
+                File::create(format!("{fname}{current_file_no}.bin"))
+                    .expect("failed to create output file")
+            } else {
+                File::create(fname).expect("failed to create output file")
+            },
+        ))
+    } else {
+        None
+    };
 
     loop {
         let payload = rx.recv().expect("failed to recv payload");
@@ -57,10 +72,26 @@ fn main() {
         }
 
         npkts_received += 1;
+        current_file_pkts += 1;
+
         if let Some(n) = args.npkts_to_recv
             && npkts_received >= n
         {
             break;
+        }
+
+        if let Some(npkts_per_file) = args.npkts_per_file
+            && let Some(ref fname) = args.outname
+            && current_file_pkts >= npkts_per_file
+        {
+            current_file_no += 1;
+            current_file_pkts = 0;
+            dump_file = Some(BufWriter::with_capacity(
+                1024 * 1024 * 1024,
+                File::create(format!("{fname}{current_file_no}.bin"))
+                    .expect("failed to create output file"),
+            ));
+            println!("new file segment created")
         }
     }
 }
