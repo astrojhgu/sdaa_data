@@ -1,5 +1,9 @@
 use lockfree_object_pool::LinearOwnedReusable;
-use std::{fs::File, io::{BufWriter, Write}, net::UdpSocket};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    net::UdpSocket,
+};
 
 use clap::Parser;
 use crossbeam::channel::unbounded;
@@ -23,11 +27,15 @@ struct Args {
 
     #[clap(short = 's', value_name = "npkts per file")]
     npkts_per_file: Option<usize>,
+
+    #[clap(short = 'b', value_name = "buffer size in MB")]
+    buffer_size_mega_byte: Option<usize>,
 }
 
 fn main() {
     //let (tx,rx)=bounded(256);
     let args = Args::parse();
+    let buffer_size_mega_byte = args.buffer_size_mega_byte.unwrap_or(8);
 
     let socket = UdpSocket::bind(&args.local_addr).expect("failed to bind local addr");
     set_recv_buffer_size(&socket, 10 * 1024 * 1024 * 1024).unwrap();
@@ -43,7 +51,7 @@ fn main() {
 
     let mut dump_file = if let Some(ref fname) = args.outname {
         Some(BufWriter::with_capacity(
-            1024 * 1024 * 1024,
+            buffer_size_mega_byte * 1024 * 1024,
             if args.npkts_per_file.is_some() {
                 File::create(format!("{fname}{current_file_no}.bin"))
                     .expect("failed to create output file")
@@ -87,7 +95,7 @@ fn main() {
             current_file_no += 1;
             current_file_pkts = 0;
             dump_file = Some(BufWriter::with_capacity(
-                1024 * 1024 * 1024,
+                buffer_size_mega_byte * 1024 * 1024,
                 File::create(format!("{fname}{current_file_no}.bin"))
                     .expect("failed to create output file"),
             ));
