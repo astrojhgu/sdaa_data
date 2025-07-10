@@ -1,13 +1,16 @@
 use lockfree_object_pool::LinearOwnedReusable;
-use std::{io::Write, net::UdpSocket};
+use std::{
+    io::Write,
+    net::{Ipv4Addr, SocketAddrV4, UdpSocket},
+};
 
 use clap::Parser;
 use crossbeam::channel::bounded;
 use sdaa_data::{
-    payload::Payload,
-    pipeline::{pkt_wf, recv_pkt},
-    utils::slice_as_u8,
     RAW_SAMP_RATE,
+    payload::Payload,
+    pipeline::{MaybeMulticastReceiver, RecvCmd, pkt_wf, recv_pkt},
+    utils::slice_as_u8,
 };
 
 #[derive(Parser, Debug)]
@@ -15,6 +18,9 @@ use sdaa_data::{
 struct Args {
     #[clap(short = 'a', long = "addr", value_name = "ip:port")]
     local_addr: String,
+
+    #[clap(short = 'm', long = "maddr", value_name = "ip")]
+    multicast_addr: Option<String>,
 
     #[clap(short = 'o', long = "out", value_name = "out name")]
     outname: Option<String>,
@@ -44,11 +50,32 @@ fn main() {
     let args = Args::parse();
     let nint = args.nint;
     let nbatch = if args.nbatch == 0 { nint } else { args.nbatch };
+    let addr = args.local_addr.parse::<SocketAddrV4>().unwrap();
 
-    let socket = UdpSocket::bind(&args.local_addr).unwrap();
+    let socket = if let Some(mcast_addr_str) = args.multicast_addr {
+        let local_iface = addr.ip().clone(); // 改成你网卡的实际 IPv4 地址
+        let mcast_addr = mcast_addr_str.parse::<Ipv4Addr>().unwrap();
+        assert!(mcast_addr.is_multicast());
+
+        MaybeMulticastReceiver::new(
+            SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), addr.port()),
+            Some((mcast_addr, local_iface)),
+        )
+        .unwrap()
+    } else {
+        UdpSocket::bind(&addr).unwrap().into()
+    };
+
     let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(16384);
     let (tx_wf, rx_wf) = bounded::<LinearOwnedReusable<Vec<f32>>>(4096);
-    let (_tx_recv_cmd, rx_recv_cmd) = bounded(1024);
+    let (tx_recv_cmd, rx_recv_cmd) = bounded(1024);
+
+    ctrlc::set_handler(move || {
+        println!("Caught Ctrl+C");
+        tx_recv_cmd.send(RecvCmd::Destroy).unwrap();
+    })
+    .expect("Error setting Ctrl+C handler");
+
     //let pool1 = Arc::clone(&pool);
     std::thread::spawn(move || pkt_wf(rx_payload, tx_wf, args.nch, nbatch, nint));
     //std::thread::sleep(std::time::Duration::from_secs(1));
@@ -68,25 +95,29 @@ fn main() {
         dt_per_iter
     );
     for _i in 0.. {
-        let x = rx_wf.recv().unwrap();
-        time_elapsed += dt_per_iter;
-        if time_elapsed as usize != old_time_elapsed_integer {
-            println!("{time_elapsed}");
-            old_time_elapsed_integer = time_elapsed as usize;
-        }
+        if let Ok(x) = rx_wf.recv() {
+            time_elapsed += dt_per_iter;
+            if time_elapsed as usize != old_time_elapsed_integer {
+                println!("{time_elapsed}");
+                old_time_elapsed_integer = time_elapsed as usize;
+            }
 
-        args.outname
-            .as_ref()
-            .map(|outname| {
-                std::fs::OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open(outname)
-                    .unwrap()
-            })
-            .iter_mut()
-            .for_each(|f| {
-                f.write_all(slice_as_u8(&x[..])).unwrap();
-            });
+            args.outname
+                .as_ref()
+                .map(|outname| {
+                    std::fs::OpenOptions::new()
+                        .append(true)
+                        .create(true)
+                        .open(outname)
+                        .unwrap()
+                })
+                .iter_mut()
+                .for_each(|f| {
+                    f.write_all(slice_as_u8(&x[..])).unwrap();
+                });
+        }else{
+            break;
+        }
+        //let x = rx_wf.recv().unwrap();
     }
 }

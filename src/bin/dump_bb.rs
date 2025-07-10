@@ -43,7 +43,7 @@ fn main() {
     let (tx, rx) = unbounded::<LinearOwnedReusable<Payload>>();
     let (_tx_cmd, rx_cmd) = unbounded();
     //let pool1 = Arc::clone(&pool);
-    std::thread::spawn(|| recv_pkt(socket, tx, rx_cmd));
+    std::thread::spawn(|| recv_pkt(socket.into(), tx, rx_cmd));
 
     let mut npkts_received = 0;
     let mut current_file_no = 0;

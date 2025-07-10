@@ -20,6 +20,7 @@ rand = "0.9.1"
 rand_distr = '0.5.1'
 libc='0.2.172'
 sdaa_ctrl = { path = '../sdaa_ctrl' }
+ctrlc = "3.4.7"
 
 [build-dependencies]
 bindgen = "0.71.1"

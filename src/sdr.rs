@@ -209,7 +209,7 @@ impl Sdr {
         tx_ddc_cmd
             .send(DdcCmd::LoCh(N_PT_PER_FRAME as isize / 4))
             .expect("failed to send loch");
-        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
+        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket.into(), tx_payload, rx_recv_cmd));
         let ddc_thread = std::thread::spawn(move || {
             let fir_coeffs = match smp_rate {
                 SdrSmpRate::SmpRate240 => fir_coeffs_full(),
@@ -279,7 +279,7 @@ impl RawSdr {
         );
         let (tx_payload, rx_payload) = bounded::<LinearOwnedReusable<Payload>>(8192);
         let (tx_recv_cmd, rx_recv_cmd) = bounded::<RecvCmd>(32);
-        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket, tx_payload, rx_recv_cmd));
+        let rx_thread = std::thread::spawn(|| recv_pkt(payload_socket.into(), tx_payload, rx_recv_cmd));
         (
             RawSdr {
                 rx_thread: Some(rx_thread),
