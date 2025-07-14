@@ -122,6 +122,7 @@ pub fn recv_pkt(
 
     let mut next_cnt = None;
     let mut ndropped = 0;
+    let mut nreceived=0;
     let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
         move || {
             //eprint!("o");
@@ -158,10 +159,7 @@ pub fn recv_pkt(
         if now.duration_since(last_print_time) >= print_interval {
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S");
             println!(
-                "{} {} pkts dropped q={}",
-                local_time,
-                ndropped,
-                tx_payload.len()
+                "{local_time} {ndropped} pkts dropped q={} ratio={:e}",tx_payload.len(), ndropped as f64/nreceived as f64
             );
             last_print_time = now;
         }
@@ -173,6 +171,7 @@ pub fn recv_pkt(
 
         if payload.pkt_cnt == 0 {
             ndropped = 0;
+            nreceived=0;
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
             println!();
             println!("==================================");
@@ -194,11 +193,13 @@ pub fn recv_pkt(
                     }
                     continue;
                 }
+                nreceived+=1;
                 if let Ok(()) = tx_payload.send(payload) {
                     break;
                 } else {
                     return;
                 }
+                
             }
 
             ndropped += 1;
@@ -215,9 +216,11 @@ pub fn recv_pkt(
                 }
                 continue;
             }
+            nreceived+=1;
             if tx_payload.send(payload1).is_err() {
                 return;
             }
+            
             *c += 1;
         }
     }
