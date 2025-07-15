@@ -1,6 +1,10 @@
 use std::net::SocketAddrV4;
 use std::time::{Duration, Instant};
-use std::{net::{UdpSocket, Ipv4Addr},ops::Deref, sync::Arc};
+use std::{
+    net::{Ipv4Addr, UdpSocket},
+    ops::Deref,
+    sync::Arc,
+};
 
 use chrono::Local;
 use crossbeam::channel::{Receiver, Sender};
@@ -16,21 +20,26 @@ use crate::{
     utils::as_mut_u8_slice,
 };
 
-
 pub struct MaybeMulticastReceiver {
     socket: UdpSocket,
     group_and_iface: Option<(Ipv4Addr, Ipv4Addr)>, // (group, iface)
 }
 
 impl MaybeMulticastReceiver {
-    pub fn new(bind_addr: SocketAddrV4, group_and_iface: Option<(Ipv4Addr, Ipv4Addr)>) -> std::io::Result<Self> {
+    pub fn new(
+        bind_addr: SocketAddrV4,
+        group_and_iface: Option<(Ipv4Addr, Ipv4Addr)>,
+    ) -> std::io::Result<Self> {
         let socket = UdpSocket::bind(bind_addr)?;
 
         if let Some((group, iface)) = group_and_iface {
             socket.join_multicast_v4(&group, &iface)?;
         }
 
-        Ok(Self { socket, group_and_iface })
+        Ok(Self {
+            socket,
+            group_and_iface,
+        })
     }
 }
 
@@ -58,7 +67,6 @@ impl From<UdpSocket> for MaybeMulticastReceiver {
         }
     }
 }
-
 
 pub enum RecvCmd {
     Destroy,
@@ -122,7 +130,7 @@ pub fn recv_pkt(
 
     let mut next_cnt = None;
     let mut ndropped = 0;
-    let mut nreceived=0;
+    let mut nreceived = 0;
     let pool: Arc<LinearObjectPool<Payload>> = Arc::new(LinearObjectPool::new(
         move || {
             //eprint!("o");
@@ -159,7 +167,9 @@ pub fn recv_pkt(
         if now.duration_since(last_print_time) >= print_interval {
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S");
             println!(
-                "{local_time} {ndropped} pkts dropped q={} ratio={:e}",tx_payload.len(), ndropped as f64/nreceived as f64
+                "{local_time} {ndropped} pkts dropped q={} ratio<{:e}",
+                tx_payload.len(),
+                (1 + ndropped) as f64 / nreceived as f64
             );
             last_print_time = now;
         }
@@ -171,7 +181,7 @@ pub fn recv_pkt(
 
         if payload.pkt_cnt == 0 {
             ndropped = 0;
-            nreceived=0;
+            nreceived = 0;
             let local_time = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
             println!();
             println!("==================================");
@@ -193,13 +203,12 @@ pub fn recv_pkt(
                     }
                     continue;
                 }
-                nreceived+=1;
+                nreceived += 1;
                 if let Ok(()) = tx_payload.send(payload) {
                     break;
                 } else {
                     return;
                 }
-                
             }
 
             ndropped += 1;
@@ -216,11 +225,11 @@ pub fn recv_pkt(
                 }
                 continue;
             }
-            nreceived+=1;
+            nreceived += 1;
             if tx_payload.send(payload1).is_err() {
                 return;
             }
-            
+
             *c += 1;
         }
     }
